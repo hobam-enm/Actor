@@ -4,7 +4,6 @@ from typing import Dict, List
 import gspread
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from google.oauth2.service_account import Credentials
@@ -27,7 +26,6 @@ DEFAULT_WEIGHTS = {
     "contribution": 0.3,
 }
 
-# 사용자 지정 기준
 DEFAULT_AXIS_THRESHOLDS = {
     "Top-S": 0.99,
     "Top-A": 0.97,
@@ -39,7 +37,20 @@ DEFAULT_AXIS_THRESHOLDS = {
     "Base-A": 0.15,
     "Base-B": 0.05,
 }
-GRADE_ORDER = ["Top-S", "Top-A", "Top-B", "Top-C", "Middle-A", "Middle-B", "Middle-C", "Base-A", "Base-B", "Base-C"]
+
+GRADE_ORDER = [
+    "Top-S",
+    "Top-A",
+    "Top-B",
+    "Top-C",
+    "Middle-A",
+    "Middle-B",
+    "Middle-C",
+    "Base-A",
+    "Base-B",
+    "Base-C",
+]
+
 VISIBLE_COLUMNS = [
     "#",
     "배우",
@@ -54,6 +65,65 @@ VISIBLE_COLUMNS = [
     "출연작품수",
 ]
 
+COLOR_MAP = {
+    "Top-S": "#0B3B91",
+    "Top-A": "#1757B0",
+    "Top-B": "#2D72D2",
+    "Top-C": "#4C8DE8",
+    "Middle-A": "#5C7CFA",
+    "Middle-B": "#748FFC",
+    "Middle-C": "#91A7FF",
+    "Base-A": "#F08C00",
+    "Base-B": "#FA5252",
+    "Base-C": "#E03131",
+}
+
+
+def inject_css():
+    st.markdown(
+        """
+        <style>
+        .block-container {padding-top: 1.4rem; padding-bottom: 2rem;}
+        .app-subtitle {color:#6b7280; margin-top:-0.2rem; margin-bottom:1rem;}
+        .soft-card {
+            background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #e5e7eb;
+            border-radius: 20px;
+            padding: 18px 20px;
+            box-shadow: 0 10px 30px rgba(15, 23, 42, 0.06);
+            height: 100%;
+        }
+        .metric-label {font-size: 0.92rem; color:#6b7280; font-weight:700; margin-bottom:10px;}
+        .metric-value {font-size: 2rem; font-weight:800; color:#111827; line-height:1.1;}
+        .metric-sub {font-size: 0.87rem; color:#6b7280; margin-top:8px;}
+        .section-title {font-size: 1.25rem; font-weight: 800; color:#111827; margin: 0 0 0.8rem 0.1rem;}
+        .pill-wrap {display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;}
+        .pill {
+            display:inline-block; padding:6px 10px; border-radius:999px;
+            background:#eff6ff; color:#1d4ed8; font-weight:700; font-size:0.82rem;
+            border:1px solid #dbeafe;
+        }
+        .mini-card {
+            background:#fff; border:1px solid #e5e7eb; border-radius:18px; padding:16px 18px;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.05); height:100%;
+        }
+        .grade-chip {display:inline-block; padding:4px 10px; border-radius:999px; color:#fff; font-size:0.8rem; font-weight:800;}
+        .actor-name {font-size:1.15rem; font-weight:800; color:#111827; margin:8px 0 6px 0;}
+        .actor-sub {font-size:0.88rem; color:#6b7280;}
+        .kv-grid {display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:12px;}
+        .work-card {background:#fff; border:1px solid #e5e7eb; border-radius:18px; padding:16px; box-shadow: 0 8px 24px rgba(15,23,42,0.05);}
+        .work-title {font-size:1rem; font-weight:800; color:#111827; margin-bottom:10px;}
+        .work-k {font-size:0.82rem; color:#6b7280; margin-bottom:4px;}
+        .work-v {font-size:1.1rem; font-weight:800; color:#111827; margin-bottom:10px;}
+        .stDataFrame {border-radius:18px; overflow:hidden;}
+        .stTextInput > div > div, .stMultiSelect > div > div, .stSelectbox > div > div {
+            border-radius: 14px !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
 
 def get_secret_section(name: str) -> Dict:
     try:
@@ -67,7 +137,6 @@ def get_gspread_client():
     if not sa:
         st.error("Secrets에 [gcp_service_account] 설정이 없습니다.")
         st.stop()
-
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets.readonly",
         "https://www.googleapis.com/auth/drive.readonly",
@@ -81,7 +150,6 @@ def load_raw_from_gsheet() -> pd.DataFrame:
     data_cfg = get_secret_section("data")
     spreadsheet_id = data_cfg.get("spreadsheet_id", "").strip()
     raw_sheet = data_cfg.get("raw_sheet", "RAW").strip() or "RAW"
-
     if not spreadsheet_id:
         st.error("Secrets의 [data].spreadsheet_id 값이 없습니다.")
         st.stop()
@@ -89,49 +157,31 @@ def load_raw_from_gsheet() -> pd.DataFrame:
     gc = get_gspread_client()
     sh = gc.open_by_key(spreadsheet_id)
     ws = sh.worksheet(raw_sheet)
-
     values = ws.get_all_values()
     if not values or len(values) < 2:
         return pd.DataFrame(columns=RAW_REQUIRED_COLUMNS)
 
-    header = values[0]
-    rows = values[1:]
-
-    fixed_header = []
-    for idx, col in enumerate(header, start=1):
-        name = (col or "").strip()
-        fixed_header.append(name if name else f"unnamed_{idx}")
-
-    max_len = len(fixed_header)
-    normalized_rows = []
-    for row in rows:
+    header = [(c or "").strip() or f"unnamed_{i+1}" for i, c in enumerate(values[0])]
+    rows = []
+    max_len = len(header)
+    for row in values[1:]:
         row = list(row)
         if len(row) < max_len:
             row += [""] * (max_len - len(row))
-        normalized_rows.append(row[:max_len])
+        rows.append(row[:max_len])
 
-    df = pd.DataFrame(normalized_rows, columns=fixed_header)
-
+    df = pd.DataFrame(rows, columns=header)
     missing = [c for c in RAW_REQUIRED_COLUMNS if c not in df.columns]
     if missing:
         st.error(f"RAW 시트에 필요한 컬럼이 없습니다: {missing}")
         st.stop()
 
-    use_cols = [
-        c
-        for c in [
-            "인물명",
-            "프로그램명",
-            "드라마화제성",
-            "배우화제성",
-            "랭크인주차",
-            "랭크인배우수",
-            "작품내랭킹",
-            "점유율",
-        ]
-        if c in df.columns
+    keep_cols = [
+        c for c in [
+            "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
+        ] if c in df.columns
     ]
-    df = df[use_cols].copy()
+    df = df[keep_cols].copy()
 
     for col in ["인물명", "프로그램명"]:
         df[col] = df[col].astype(str).str.strip()
@@ -147,8 +197,6 @@ def load_raw_from_gsheet() -> pd.DataFrame:
     df = df[df["프로그램명"].notna() & (df["프로그램명"] != "")].copy()
     return df
 
-
-# Google Sheets PERCENTRANK.INC에 가깝게 맞추기 위한 처리
 
 def percentrank_inc_min(series: pd.Series) -> pd.Series:
     s = pd.to_numeric(series, errors="coerce").astype(float)
@@ -195,8 +243,7 @@ def build_result_table(raw_df: pd.DataFrame) -> pd.DataFrame:
     result["보정 작품평균"] = (result["배우화제성"] + 3 * global_avg) / (result["출연작품수"] + 3)
 
     result["히트 분산지수"] = 1 - grouped["배우화제성"].max() / result["배우화제성"]
-    r_min = result["히트 분산지수"].min()
-    r_max = result["히트 분산지수"].max()
+    r_min, r_max = result["히트 분산지수"].min(), result["히트 분산지수"].max()
     if pd.isna(r_min) or pd.isna(r_max) or math.isclose(r_min, r_max):
         result["히트 분산정규화"] = 0.0
     else:
@@ -208,8 +255,7 @@ def build_result_table(raw_df: pd.DataFrame) -> pd.DataFrame:
     result["3위배율"] = grouped["r3"].sum() / result["출연작품수"]
     result["대표작 성과백분위"] = percentrank_inc_min(result["대표작 성과"])
 
-    p_min = result["보정 작품평균"].min()
-    p_max = result["보정 작품평균"].max()
+    p_min, p_max = result["보정 작품평균"].min(), result["보정 작품평균"].max()
     if pd.isna(p_min) or pd.isna(p_max) or math.isclose(p_min, p_max):
         p_norm = pd.Series(0.0, index=result.index)
     else:
@@ -222,9 +268,12 @@ def build_result_table(raw_df: pd.DataFrame) -> pd.DataFrame:
         + 0.2 * (result["대표작 성과백분위"] ** 3),
     )
 
-    result["보정기여도"] = 0.5 * p_norm + 0.5 * (
+    base_contribution = 0.5 * p_norm + 0.5 * (
         result["화제성 기여도"] * (result["1위배율"] + result["2위배율"] + result["3위배율"])
     )
+    result["작품체급백분위"] = percentrank_inc_min(result["드라마화제성"])
+    result["작품체급보정"] = 0.45 + 0.55 * result["작품체급백분위"]
+    result["보정기여도"] = base_contribution * result["작품체급보정"]
 
     result["생산백분율"] = percentrank_inc_min(result["배우화제성"])
     result["안정백분율"] = percentrank_inc_min(result["꾸준함지수"])
@@ -266,216 +315,266 @@ def format_score(x: float) -> str:
 def format_visible_table(df: pd.DataFrame) -> pd.DataFrame:
     out = df[VISIBLE_COLUMNS].copy()
     out["합산점수"] = pd.to_numeric(out["합산점수"], errors="coerce").map(format_score)
-
     for col in ["생산백분율", "안정백분율", "기여백분율"]:
         out[col] = pd.to_numeric(out[col], errors="coerce").map(format_percent_0)
-
     for col in ["배우화제성", "출연작품수"]:
         out[col] = pd.to_numeric(out[col], errors="coerce").map(format_int)
-
     out["#"] = out["#"].astype(int).astype(str)
     return out
 
 
-def make_grade_count_chart(result_df: pd.DataFrame, grade_col: str, title: str):
-    counts = (
-        result_df[grade_col]
-        .value_counts()
-        .reindex(GRADE_ORDER, fill_value=0)
-        .reset_index()
+def metric_card(label: str, value: str, sub: str = ""):
+    st.markdown(
+        f"""
+        <div class='soft-card'>
+            <div class='metric-label'>{label}</div>
+            <div class='metric-value'>{value}</div>
+            <div class='metric-sub'>{sub}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    counts.columns = ["등급", "인원수"]
-    fig = px.bar(counts, x="등급", y="인원수", text="인원수", title=title)
-    fig.update_layout(height=360, margin=dict(l=20, r=20, t=50, b=20), xaxis_title=None, yaxis_title=None)
-    fig.update_traces(textposition="outside")
-    return fig
 
 
-def make_axis_mix_chart(result_df: pd.DataFrame):
-    summary = pd.DataFrame(
-        {
-            "축": ["생산력", "안정성", "기여도"],
-            "평균 백분율": [
-                result_df["생산백분율"].mean() * 100,
-                result_df["안정백분율"].mean() * 100,
-                result_df["기여백분율"].mean() * 100,
-            ],
-        }
+def actor_card(name: str, grade: str, score: float, sub_text: str):
+    color = COLOR_MAP.get(grade, "#334155")
+    st.markdown(
+        f"""
+        <div class='mini-card'>
+            <span class='grade-chip' style='background:{color};'>{grade}</span>
+            <div class='actor-name'>{name}</div>
+            <div class='actor-sub'>합산점수 {format_score(score)}</div>
+            <div class='actor-sub' style='margin-top:6px;'>{sub_text}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    fig = px.bar(summary, x="축", y="평균 백분율", text="평균 백분율", title="축별 평균 백분율")
-    fig.update_traces(texttemplate="%{text:.1f}%", textposition="outside")
-    fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=20), xaxis_title=None, yaxis_title=None)
-    return fig
 
 
-def make_scatter(result_df: pd.DataFrame):
-    fig = px.scatter(
-        result_df,
-        x="안정백분율",
-        y="기여백분율",
-        size="배우화제성",
-        color="생산력등급",
-        hover_name="배우",
-        hover_data={
-            "합산점수": ":.2f",
-            "생산백분율": ":.2%",
-            "안정백분율": ":.2%",
-            "기여백분율": ":.2%",
-            "배우화제성": ":,.0f",
-            "출연작품수": ":,.0f",
-        },
-        title="안정성 × 기여도 포지셔닝",
+def work_card(program: str, drama_score: float, actor_score: float):
+    st.markdown(
+        f"""
+        <div class='work-card'>
+            <div class='work-title'>{program}</div>
+            <div class='work-k'>드라마화제성</div>
+            <div class='work-v'>{format_int(drama_score)}</div>
+            <div class='work-k'>배우화제성</div>
+            <div class='work-v'>{format_int(actor_score)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
-    fig.update_layout(height=500, margin=dict(l=20, r=20, t=50, b=20), xaxis_title="안정 백분율", yaxis_title="기여 백분율")
-    fig.update_xaxes(tickformat=".0%")
-    fig.update_yaxes(tickformat=".0%")
-    return fig
 
 
-def make_top10_table(result_df: pd.DataFrame) -> pd.DataFrame:
-    top10 = result_df.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).head(10).copy()
-    return format_visible_table(top10)
+def render_grade_representatives(result_df: pd.DataFrame):
+    st.markdown("<div class='section-title'>등급별 대표배우</div>", unsafe_allow_html=True)
+    reps = []
+    for grade in GRADE_ORDER:
+        sub = result_df[result_df["생산력등급"] == grade].sort_values(["합산점수", "배우화제성"], ascending=[False, False]).head(1)
+        if len(sub):
+            reps.append(sub.iloc[0])
+
+    cols = st.columns(5)
+    for idx, row in enumerate(reps[:10]):
+        with cols[idx % 5]:
+            actor_card(
+                row["배우"],
+                row["생산력등급"],
+                row["합산점수"],
+                f"배우화제성 {format_int(row['배우화제성'])} · 출연작 {format_int(row['출연작품수'])}개",
+            )
 
 
-def filter_result_df(result_df: pd.DataFrame, raw_df: pd.DataFrame, actor_keyword: str, program_keyword: str, prod_grades: List[str], stab_grades: List[str], cont_grades: List[str]) -> pd.DataFrame:
+def build_actor_program_summary(raw_df: pd.DataFrame, actor_name: str) -> pd.DataFrame:
+    actor_raw = raw_df[raw_df["인물명"] == actor_name].copy()
+    if actor_raw.empty:
+        return pd.DataFrame(columns=["프로그램명", "드라마화제성", "배우화제성"])
+    agg = (
+        actor_raw.groupby("프로그램명", as_index=False)[["드라마화제성", "배우화제성"]]
+        .sum()
+        .sort_values(["배우화제성", "드라마화제성"], ascending=[False, False])
+    )
+    return agg
+
+
+def filter_result_df(
+    result_df: pd.DataFrame,
+    raw_df: pd.DataFrame,
+    actor_keyword: str,
+    program_keyword: str,
+    prod_grades: List[str],
+    stab_grades: List[str],
+    cont_grades: List[str],
+) -> pd.DataFrame:
     filtered = result_df.copy()
-
     if actor_keyword.strip():
         filtered = filtered[filtered["배우"].str.contains(actor_keyword.strip(), case=False, na=False)]
-
     if program_keyword.strip():
         actor_pool = raw_df.loc[
             raw_df["프로그램명"].str.contains(program_keyword.strip(), case=False, na=False),
             "인물명",
         ].dropna().unique().tolist()
         filtered = filtered[filtered["배우"].isin(actor_pool)]
-
     if prod_grades:
         filtered = filtered[filtered["생산력등급"].isin(prod_grades)]
     if stab_grades:
         filtered = filtered[filtered["안정성등급"].isin(stab_grades)]
     if cont_grades:
         filtered = filtered[filtered["기여도등급"].isin(cont_grades)]
-
     filtered = filtered.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).reset_index(drop=True)
     filtered["#"] = np.arange(1, len(filtered) + 1)
     return filtered
 
 
-def render_summary_page(raw_df: pd.DataFrame, result_df: pd.DataFrame):
-    st.subheader("요약")
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("전체 배우 수", f"{result_df['배우'].nunique():,}")
-    c2.metric("전체 작품 수", f"{raw_df['프로그램명'].nunique():,}")
-    c3.metric("Top 구간 비중", f"{((result_df['생산력등급'].isin(GRADE_ORDER[:4])).mean() * 100):.1f}%")
-    c4.metric("평균 합산점수", f"{result_df['합산점수'].mean():,.2f}")
+def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
+    st.markdown("<div class='section-title'>Overview</div>", unsafe_allow_html=True)
+    total_actors = result_df["배우"].nunique()
+    total_programs = raw_df["프로그램명"].nunique()
+    top_ratio = result_df["생산력등급"].isin(GRADE_ORDER[:4]).mean() * 100
+    avg_score = result_df["합산점수"].mean()
+    best_actor = result_df.iloc[0]["배우"] if len(result_df) else "-"
 
-    left, right = st.columns([1.2, 1])
-    with left:
-        st.plotly_chart(make_scatter(result_df), use_container_width=True)
-    with right:
-        st.plotly_chart(make_axis_mix_chart(result_df), use_container_width=True)
-        st.markdown("### 합산점수 상위 10")
-        st.dataframe(make_top10_table(result_df), use_container_width=True, hide_index=True, height=360)
+    c1, c2, c3, c4, c5 = st.columns(5)
+    with c1:
+        metric_card("전체 배우", format_int(total_actors), "RAW 기반 계산 결과")
+    with c2:
+        metric_card("전체 작품", format_int(total_programs), "프로그램 기준")
+    with c3:
+        metric_card("Top 구간 비중", f"{top_ratio:.1f}%", "Top-S ~ Top-C")
+    with c4:
+        metric_card("평균 합산점수", format_score(avg_score), "전체 배우 평균")
+    with c5:
+        metric_card("현재 1위 배우", best_actor, f"합산점수 {format_score(result_df.iloc[0]['합산점수'])}" if len(result_df) else "")
 
-    g1, g2, g3 = st.columns(3)
-    with g1:
-        st.plotly_chart(make_grade_count_chart(result_df, "생산력등급", "생산력 등급 분포"), use_container_width=True)
-    with g2:
-        st.plotly_chart(make_grade_count_chart(result_df, "안정성등급", "안정성 등급 분포"), use_container_width=True)
-    with g3:
-        st.plotly_chart(make_grade_count_chart(result_df, "기여도등급", "기여도 등급 분포"), use_container_width=True)
+    render_grade_representatives(result_df)
+
+    st.markdown("<div class='section-title'>결과 테이블</div>", unsafe_allow_html=True)
+    st.dataframe(format_visible_table(result_df), use_container_width=True, hide_index=True, height=760)
 
 
-def render_detail_page(raw_df: pd.DataFrame, result_df: pd.DataFrame):
-    st.subheader("상세 탐색")
-
-    with st.sidebar:
-        st.markdown("### 상세 필터")
-        actor_keyword = st.text_input("배우 검색", "")
-        program_keyword = st.text_input("작품 검색", "")
+def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
+    st.markdown("<div class='section-title'>상세보기</div>", unsafe_allow_html=True)
+    f1, f2, f3, f4, f5 = st.columns([1.2, 1.2, 1, 1, 1])
+    with f1:
+        actor_keyword = st.text_input("배우 검색", placeholder="배우명 입력")
+    with f2:
+        program_keyword = st.text_input("작품 검색", placeholder="프로그램명 입력")
+    with f3:
         prod_grades = st.multiselect("생산력 등급", GRADE_ORDER)
+    with f4:
         stab_grades = st.multiselect("안정성 등급", GRADE_ORDER)
+    with f5:
         cont_grades = st.multiselect("기여도 등급", GRADE_ORDER)
 
     filtered = filter_result_df(result_df, raw_df, actor_keyword, program_keyword, prod_grades, stab_grades, cont_grades)
 
-    c1, c2, c3 = st.columns(3)
-    c1.metric("조회 배우 수", f"{len(filtered):,}")
-    c2.metric("평균 합산점수", f"{filtered['합산점수'].mean():,.2f}" if len(filtered) else "0.00")
-    c3.metric("조회 작품 수", f"{raw_df[raw_df['인물명'].isin(filtered['배우'])]['프로그램명'].nunique():,}" if len(filtered) else "0")
+    s1, s2, s3 = st.columns(3)
+    with s1:
+        metric_card("조회 배우 수", format_int(len(filtered)), "현재 필터 기준")
+    with s2:
+        metric_card("평균 합산점수", format_score(filtered["합산점수"].mean()) if len(filtered) else "0.00", "현재 필터 기준")
+    with s3:
+        metric_card(
+            "관련 작품 수",
+            format_int(raw_df[raw_df["인물명"].isin(filtered["배우"])]["프로그램명"].nunique()) if len(filtered) else "0",
+            "현재 필터 기준",
+        )
 
-    st.markdown("### 결과 테이블")
-    st.dataframe(format_visible_table(filtered), use_container_width=True, hide_index=True, height=680)
-
-    csv = filtered[VISIBLE_COLUMNS].to_csv(index=False).encode("utf-8-sig")
-    st.download_button("결과 테이블 CSV 다운로드", data=csv, file_name="actor_quant_result_table.csv", mime="text/csv")
-
-    if len(filtered) == 0:
+    if filtered.empty:
+        st.info("조건에 맞는 배우가 없습니다.")
         return
 
-    st.markdown("### 배우 상세 보기")
-    selected_actor = st.selectbox("배우 선택", filtered["배우"].tolist())
+    actor_options = filtered["배우"].tolist()
+    selected_actor = st.selectbox("배우 선택", actor_options, index=0)
     actor_row = filtered[filtered["배우"] == selected_actor].iloc[0]
-    actor_raw = raw_df[raw_df["인물명"] == selected_actor].copy()
 
-    a1, a2, a3, a4 = st.columns(4)
-    a1.metric("생산력 등급", actor_row["생산력등급"])
-    a2.metric("안정성 등급", actor_row["안정성등급"])
-    a3.metric("기여도 등급", actor_row["기여도등급"])
-    a4.metric("합산점수", f"{actor_row['합산점수']:,.2f}")
-
-    bar_df = pd.DataFrame(
-        {
-            "축": ["생산", "안정", "기여"],
-            "백분율": [actor_row["생산백분율"] * 100, actor_row["안정백분율"] * 100, actor_row["기여백분율"] * 100],
-        }
-    )
-    fig = px.bar(bar_df, x="축", y="백분율", text="백분율", title=f"{selected_actor} 축별 백분율")
-    fig.update_traces(texttemplate="%{text:.0f}%", textposition="outside")
-    fig.update_layout(height=320, margin=dict(l=20, r=20, t=50, b=20), xaxis_title=None, yaxis_title=None)
-    st.plotly_chart(fig, use_container_width=True)
-
-    info1, info2 = st.columns(2)
-    with info1:
-        st.markdown("### 배우 요약")
-        summary_df = pd.DataFrame(
-            {
-                "항목": ["배우", "배우화제성", "출연작품수", "생산백분율", "안정백분율", "기여백분율", "출연작"],
-                "값": [
-                    actor_row["배우"],
-                    format_int(actor_row["배우화제성"]),
-                    format_int(actor_row["출연작품수"]),
-                    format_percent_0(actor_row["생산백분율"]),
-                    format_percent_0(actor_row["안정백분율"]),
-                    format_percent_0(actor_row["기여백분율"]),
-                    actor_row["출연작"],
-                ],
-            }
+    a1, a2, a3, a4 = st.columns([1.35, 1, 1, 1])
+    with a1:
+        actor_card(
+            actor_row["배우"],
+            actor_row["생산력등급"],
+            actor_row["합산점수"],
+            f"생산 {format_percent_0(actor_row['생산백분율'])} · 안정 {format_percent_0(actor_row['안정백분율'])} · 기여 {format_percent_0(actor_row['기여백분율'])}",
         )
-        st.dataframe(summary_df, use_container_width=True, hide_index=True, height=290)
-    with info2:
-        st.markdown("### 출연 작품별 RAW")
-        actor_raw_display = actor_raw[[c for c in ["프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹"] if c in actor_raw.columns]].copy()
-        for col in ["드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹"]:
-            if col in actor_raw_display.columns:
-                actor_raw_display[col] = pd.to_numeric(actor_raw_display[col], errors="coerce").map(format_int)
-        st.dataframe(actor_raw_display, use_container_width=True, hide_index=True, height=290)
+    with a2:
+        metric_card("생산력 등급", actor_row["생산력등급"], f"항목별 점수 {format_percent_0(actor_row['생산백분율'])}")
+    with a3:
+        metric_card("안정성 등급", actor_row["안정성등급"], f"항목별 점수 {format_percent_0(actor_row['안정백분율'])}")
+    with a4:
+        metric_card("기여도 등급", actor_row["기여도등급"], f"항목별 점수 {format_percent_0(actor_row['기여백분율'])}")
+
+    left, right = st.columns([1.05, 1.2])
+    with left:
+        radar = go.Figure()
+        radar.add_trace(
+            go.Scatterpolar(
+                r=[actor_row["생산백분율"] * 100, actor_row["안정백분율"] * 100, actor_row["기여백분율"] * 100],
+                theta=["생산력", "안정성", "기여도"],
+                fill="toself",
+                name="항목별 점수",
+                line=dict(color="#2D72D2", width=3),
+                fillcolor="rgba(45,114,210,0.25)",
+            )
+        )
+        radar.update_layout(
+            title="항목별 점수",
+            polar=dict(radialaxis=dict(visible=True, range=[0, 100], ticksuffix="")),
+            height=420,
+            margin=dict(l=10, r=10, t=60, b=20),
+            showlegend=False,
+        )
+        st.plotly_chart(radar, use_container_width=True)
+    with right:
+        st.markdown("<div class='section-title'>배우 요약</div>", unsafe_allow_html=True)
+        g1, g2 = st.columns(2)
+        with g1:
+            metric_card("합산점수", format_score(actor_row["합산점수"]), "가중합 기준")
+        with g2:
+            metric_card("배우화제성", format_int(actor_row["배우화제성"]), "누적 기준")
+        g3, g4 = st.columns(2)
+        with g3:
+            metric_card("출연작품수", format_int(actor_row["출연작품수"]), "누적 작품 수")
+        with g4:
+            metric_card("대표 생산등급", actor_row["생산력등급"], "축별 등급 기준")
+        st.markdown(
+            f"""
+            <div class='soft-card' style='margin-top:12px;'>
+                <div class='metric-label'>출연작 목록</div>
+                <div class='pill-wrap'>
+                    {''.join([f"<span class='pill'>{p.strip()}</span>" for p in str(actor_row['출연작']).split(',') if p.strip()][:18])}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div class='section-title'>대표출연작</div>", unsafe_allow_html=True)
+    actor_programs = build_actor_program_summary(raw_df, selected_actor).head(6)
+    cols = st.columns(3)
+    for idx, row in actor_programs.iterrows():
+        with cols[idx % 3]:
+            work_card(row["프로그램명"], row["드라마화제성"], row["배우화제성"])
 
 
 def main():
+    inject_css()
     app_cfg = get_secret_section("app")
     st.title(app_cfg.get("title", "배우 정량분석 대시보드"))
-    st.caption(app_cfg.get("subtitle", "RAW 시트를 기반으로 배우 정량분석 결과를 계산하고 시각화합니다."))
+    st.markdown(
+        f"<div class='app-subtitle'>{app_cfg.get('subtitle', 'RAW 시트를 기반으로 배우 정량분석 결과를 계산하고 시각화합니다.')}</div>",
+        unsafe_allow_html=True,
+    )
 
     raw_df = load_raw_from_gsheet()
     result_df = build_result_table(raw_df)
 
-    summary_tab, detail_tab = st.tabs(["메인", "상세"])
-    with summary_tab:
-        render_summary_page(raw_df, result_df)
-    with detail_tab:
-        render_detail_page(raw_df, result_df)
+    page = st.sidebar.radio("페이지", ["overview", "상세보기"], index=0)
+    st.sidebar.caption("RAW 기반 계산 결과")
+
+    if page == "overview":
+        render_overview(raw_df, result_df)
+    else:
+        render_detail(raw_df, result_df)
 
 
 if __name__ == "__main__":
