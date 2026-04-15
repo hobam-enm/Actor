@@ -43,14 +43,14 @@ GRADE_ORDER = [
 TIER_BASE_ORDER = ["Top", "Middle", "Base"]
 
 TIER_COLORS = {
-    "Top": "#1957b6",
-    "Middle": "#6b7cff",
+    "Top": "#1f4ed8",
+    "Middle": "#0f9f8f",
     "Base": "#ef6a5b",
 }
 GRADE_BG = {
-    "Top-S": "#0f3d91", "Top-A": "#1a56b0", "Top-B": "#2e6fd1", "Top-C": "#4d8de7",
-    "Middle-A": "#6b7cff", "Middle-B": "#8396ff", "Middle-C": "#aab6ff",
-    "Base-A": "#ffb366", "Base-B": "#ff8b7c", "Base-C": "#ff6b6b",
+    "Top-S": "#5b3df5", "Top-A": "#1f4ed8", "Top-B": "#3b6df0", "Top-C": "#7ea2ff",
+    "Middle-A": "#0f9f8f", "Middle-B": "#33b8a6", "Middle-C": "#8adccd",
+    "Base-A": "#f08a24", "Base-B": "#f56b5f", "Base-C": "#ff8f87",
 }
 
 VISIBLE_COLUMNS = [
