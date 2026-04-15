@@ -269,7 +269,16 @@ def load_raw_from_gsheet() -> pd.DataFrame:
         st.error(f"RAW 시트에 필요한 컬럼이 없습니다: {missing}")
         st.stop()
 
-    period_values = [str(row[0]).strip() if len(row) > 0 else "" for row in rows]
+
+    # ===== 기간 데이터만 'source' 시트에서 별도로 가져오기 =====
+    try:
+        ws_source = sh.worksheet("source")
+        source_values = ws_source.get_all_values()
+        # source 시트의 2번째 행(데이터 시작)부터 A열(첫 번째 열) 값을 기간으로 사용
+        period_values = [str(row[0]).strip() if len(row) > 0 else "" for row in source_values[1:]]
+    except Exception:
+        period_values = []
+
     keep_cols = [c for c in [
         "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
     ] if c in df.columns]
