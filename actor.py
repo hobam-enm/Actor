@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="배우 다차원 화제성 지표 - 드라마", layout="wide")
+st.set_page_config(page_title="배우 다차원 화제성 지표 - 드라마", layout="wide", initial_sidebar_state="expanded")
 
 RAW_REQUIRED_COLUMNS = [
     "인물명",
@@ -66,17 +66,11 @@ def inject_css():
         <style>
         .stApp {background: #f5f7fb;}
         
-[data-testid="stHeader"] {
-            background: rgba(255,255,255,0) !important;
-            height: 44px;
-}
-[data-testid="stHeader"] > div {
-            height: 44px;
-}
-
+[data-testid="stHeader"] {display:none;}
         [data-testid="stToolbar"] {display:none;}
         [data-testid="stDecoration"] {display:none;}
         [data-testid="stSidebarNav"] {display:none;}
+        [data-testid="collapsedControl"] {display:none !important;}
         .block-container {padding-top: 0.55rem; padding-bottom: 2rem; max-width: 1500px;}
         h1, h2, h3 {letter-spacing: -0.02em;}
         .page-title {font-size: 2.05rem; font-weight: 900; color:#1f2937; margin-bottom: 1.2rem;}
@@ -577,7 +571,7 @@ def chip_html(label: str, grade: str) -> str:
 
 
 def parse_week_label(label: str):
-    m = re.search(r"(\d{2})년\s*(\d{1,2})월\s*(\d)째주", str(label))
+    m = re.search(r"(\d{2})년\s*(\d{1,2})월\s*(\d{1,2})째주", str(label).strip())
     if not m:
         return None
     yy, mm, ww = map(int, m.groups())
@@ -605,7 +599,8 @@ def render_reference():
             <div class='rep-title'>1. 기본 구조</div>
             <div class='actor-sub'>
             본 대시보드는 FUNDEX 인물 화제성점수를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
-            합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.
+            합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.<br>
+            주단위 인물화제성(드라마) Top20 이내에 랭크된 배우를 기준으로 합니다.
             </div>
             <div class='spacer-md'></div>
             <div class='rep-title'>2. 항목별 계산 개요</div>
@@ -662,6 +657,9 @@ def table_styler(df: pd.DataFrame):
 
 def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>OVERVIEW</div>", unsafe_allow_html=True)
+    period_caption = get_data_period_caption(raw_df)
+    if period_caption:
+        st.caption(period_caption)
     total_actors = result_df["배우"].nunique()
     total_programs = raw_df["프로그램명"].nunique()
     top_ratio = (result_df["대분류티어"] == "Top").mean() * 100
@@ -863,10 +861,6 @@ def main():
 
     raw_df = load_raw_from_gsheet()
     result_df = build_result_table(raw_df)
-    period_caption = get_data_period_caption(raw_df)
-    if period_caption:
-        st.caption(period_caption)
-
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
         page = st.radio("", ["OVERVIEW", "상세보기", "배우 모아보기", "참고사항"], index=0, label_visibility="collapsed")
