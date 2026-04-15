@@ -9,7 +9,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
-st.set_page_config(page_title="배우 다차원 화제성 지표 - 드라마", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="배우 다차원 화제성 지표 - 드라마", layout="wide")
 
 RAW_REQUIRED_COLUMNS = [
     "인물명",
@@ -66,22 +66,11 @@ def inject_css():
         <style>
         .stApp {background: #f5f7fb;}
         
-[data-testid="stHeader"] {
-            background: rgba(245,247,251,0.85) !important;
-            backdrop-filter: blur(4px);
-            height: 44px;
-        }
-        [data-testid="stHeader"] > div {
-            height: 44px;
-        }
-        [data-testid="stToolbar"] {display:none;}
-        [data-testid="stDecoration"] {display:none;}
-        [data-testid="stSidebarNav"] {display:none;}
+[data-testid="stSidebarNav"] {display:none;}
         .block-container {padding-top: 0.55rem; padding-bottom: 2rem; max-width: 1500px;}
         h1, h2, h3 {letter-spacing: -0.02em;}
         .page-title {font-size: 2.05rem; font-weight: 900; color:#1f2937; margin-bottom: 1.2rem;}
         .section-title {font-size: 1.35rem; font-weight: 900; color:#232b3a; margin: 0.2rem 0 0.95rem 0.15rem;}
-        .period-caption {font-size:0.84rem; color:#7b8495; margin: -0.35rem 0 1.1rem 0.15rem;}
         .spacer-lg {height: 24px;}
         .spacer-md {height: 14px;}
         .card {
@@ -262,11 +251,9 @@ def load_raw_from_gsheet() -> pd.DataFrame:
 
     header = [(c or "").strip() or f"unnamed_{i+1}" for i, c in enumerate(values[0])]
     rows = []
-    period_values = []
     max_len = len(header)
     for row in values[1:]:
         row = list(row)
-        period_values.append(str(row[0]).strip() if len(row) > 0 else "")
         if len(row) < max_len:
             row += [""] * (max_len - len(row))
         rows.append(row[:max_len])
@@ -277,6 +264,7 @@ def load_raw_from_gsheet() -> pd.DataFrame:
         st.error(f"RAW 시트에 필요한 컬럼이 없습니다: {missing}")
         st.stop()
 
+    period_values = [str(row[0]).strip() if len(row) > 0 else "" for row in rows]
     keep_cols = [c for c in [
         "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
     ] if c in df.columns]
@@ -583,17 +571,17 @@ def parse_week_label(label: str):
     if not s:
         return None
 
-    # 우선 "NN년 NN월 N째주" 계열을 직접 파싱
+    # 예: 25년03월1째주 / 25년 3월 1째주 / 25년3월1주차 / 25년3월1주
     m = re.search(r"(\d{2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*(?:째주|주차|주)", s)
     if m:
         yy, mm, ww = map(int, m.groups())
         return (2000 + yy, mm, ww)
 
-    # 한글/기호가 섞여 있어도 숫자 3개를 연-월-주로 해석
+    # 숫자만 추출 가능한 경우 앞의 3개를 연/월/주로 해석
     nums = re.findall(r"\d+", s)
     if len(nums) >= 3:
         yy, mm, ww = map(int, nums[:3])
-        if 0 <= yy <= 99 and 1 <= mm <= 12 and 1 <= ww <= 9:
+        if 0 <= yy <= 99 and 1 <= mm <= 12 and 1 <= ww <= 12:
             return (2000 + yy, mm, ww)
 
     return None
@@ -601,14 +589,25 @@ def parse_week_label(label: str):
 def get_data_period_caption(raw_df: pd.DataFrame) -> str:
     if "__period_raw" not in raw_df.columns:
         return ""
-    raw_vals = raw_df["__period_raw"].dropna().astype(str).str.strip()
-    parsed = [(parse_week_label(v), v) for v in raw_vals if v]
-    parsed = [(k, v) for k, v in parsed if k is not None]
-    if not parsed:
-        return ""
-    parsed.sort(key=lambda x: x[0])
-    return f"데이터 기준 기간 · {parsed[0][1]} ~ {parsed[-1][1]}"
 
+    raw_vals = raw_df["__period_raw"].dropna().astype(str).str.strip()
+    raw_vals = raw_vals[raw_vals != ""]
+    if raw_vals.empty:
+        return ""
+
+    parsed = [(parse_week_label(v), v) for v in raw_vals]
+    parsed_valid = [(k, v) for k, v in parsed if k is not None]
+
+    if parsed_valid:
+        parsed_valid.sort(key=lambda x: x[0])
+        return f"데이터 기준 기간 · {parsed_valid[0][1]} ~ {parsed_valid[-1][1]}"
+
+    # 파싱 실패 시, 원본 순서 기준 첫 값/마지막 값이라도 표시
+    first_val = raw_vals.iloc[0]
+    last_val = raw_vals.iloc[-1]
+    if first_val or last_val:
+        return f"데이터 기준 기간 · {first_val} ~ {last_val}"
+    return ""
 
 def render_reference():
     st.markdown("<div class='section-title'>참고사항</div>", unsafe_allow_html=True)
@@ -675,9 +674,6 @@ def table_styler(df: pd.DataFrame):
 
 def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>OVERVIEW</div>", unsafe_allow_html=True)
-    period_caption = get_data_period_caption(raw_df)
-    if period_caption:
-        st.markdown(f"<div class='period-caption'>{period_caption}</div>", unsafe_allow_html=True)
     total_actors = result_df["배우"].nunique()
     total_programs = raw_df["프로그램명"].nunique()
     top_ratio = (result_df["대분류티어"] == "Top").mean() * 100
