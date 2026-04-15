@@ -66,7 +66,10 @@ def inject_css():
         <style>
         .stApp {background: #f5f7fb;}
         
-[data-testid="stSidebarNav"] {display:none;}
+[data-testid="stHeader"] {display:none;}
+        [data-testid="stToolbar"] {display:none;}
+        [data-testid="stDecoration"] {display:none;}
+        [data-testid="stSidebarNav"] {display:none;}
         .block-container {padding-top: 0.55rem; padding-bottom: 2rem; max-width: 1500px;}
         h1, h2, h3 {letter-spacing: -0.02em;}
         .page-title {font-size: 2.05rem; font-weight: 900; color:#1f2937; margin-bottom: 1.2rem;}
@@ -566,48 +569,49 @@ def chip_html(label: str, grade: str) -> str:
     return f"<span class='chip' style='background:{bg}; color:{fg};'>{label}</span>"
 
 
+
 def parse_week_label(label: str):
     s = str(label).strip()
     if not s:
         return None
 
-    # 예: 25년03월1째주 / 25년 3월 1째주 / 25년3월1주차 / 25년3월1주
-    m = re.search(r"(\d{2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*(?:째주|주차|주)", s)
-    if m:
-        yy, mm, ww = map(int, m.groups())
-        return (2000 + yy, mm, ww)
-
-    # 숫자만 추출 가능한 경우 앞의 3개를 연/월/주로 해석
+    # 숫자만 뽑아 연/월/주를 찾고, 표시는 원문 그대로 사용
     nums = re.findall(r"\d+", s)
     if len(nums) >= 3:
-        yy, mm, ww = map(int, nums[:3])
-        if 0 <= yy <= 99 and 1 <= mm <= 12 and 1 <= ww <= 12:
-            return (2000 + yy, mm, ww)
-
+        try:
+            yy = int(nums[0])
+            mm = int(nums[1])
+            ww = int(nums[2])
+            if 0 <= yy <= 99 and 1 <= mm <= 12 and 1 <= ww <= 12:
+                return (2000 + yy, mm, ww)
+        except Exception:
+            return None
     return None
+
 
 def get_data_period_caption(raw_df: pd.DataFrame) -> str:
     if "__period_raw" not in raw_df.columns:
         return ""
 
-    raw_vals = raw_df["__period_raw"].dropna().astype(str).str.strip()
-    raw_vals = raw_vals[raw_vals != ""]
-    if raw_vals.empty:
+    vals = raw_df["__period_raw"].dropna().astype(str).str.strip()
+    vals = vals[vals != ""]
+    if vals.empty:
         return ""
 
-    parsed = [(parse_week_label(v), v) for v in raw_vals]
-    parsed_valid = [(k, v) for k, v in parsed if k is not None]
+    unique_vals = pd.Series(pd.unique(vals))
+    parsed = []
+    for v in unique_vals:
+        key = parse_week_label(v)
+        if key is not None:
+            parsed.append((key, v))
 
-    if parsed_valid:
-        parsed_valid.sort(key=lambda x: x[0])
-        return f"데이터 기준 기간 · {parsed_valid[0][1]} ~ {parsed_valid[-1][1]}"
+    if parsed:
+        parsed.sort(key=lambda x: x[0])
+        return f"데이터 기준 기간 · {parsed[0][1]} ~ {parsed[-1][1]}"
 
-    # 파싱 실패 시, 원본 순서 기준 첫 값/마지막 값이라도 표시
-    first_val = raw_vals.iloc[0]
-    last_val = raw_vals.iloc[-1]
-    if first_val or last_val:
-        return f"데이터 기준 기간 · {first_val} ~ {last_val}"
-    return ""
+    # 파싱이 전부 실패하면 원본 첫값/마지막값 그대로라도 표기
+    return f"데이터 기준 기간 · {unique_vals.iloc[0]} ~ {unique_vals.iloc[-1]}"
+
 
 def render_reference():
     st.markdown("<div class='section-title'>참고사항</div>", unsafe_allow_html=True)
