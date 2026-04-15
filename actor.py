@@ -882,12 +882,12 @@ def main():
 
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-        page = st.radio("", ["OVERVIEW", "상세보기", "배우 모아보기", "참고사항"], index=0, label_visibility="collapsed")
+        page = st.radio("", ["OVERVIEW", "배우 상세보기", "배우 모아보기", "참고사항"], index=0, label_visibility="collapsed")
         st.markdown("<div class='sidebar-footnote'>문의 : 미디어마케팅팀 데이터인사이트파트</div>", unsafe_allow_html=True)
 
     if page == "OVERVIEW":
         render_overview(raw_df, result_df)
-    elif page == "상세보기":
+    elif page == "배우 상세보기":
         render_detail(raw_df, result_df)
     elif page == "배우 모아보기":
         render_compare(raw_df, result_df)
