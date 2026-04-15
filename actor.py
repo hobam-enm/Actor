@@ -642,22 +642,20 @@ def render_reference():
 
     # 1. 지표 구성 개요
     st.markdown(
-        """
-        <div class='card'>
-            <div class='rep-title' style='font-size:1.1rem;'>1. 지표 구성 개요</div>
-            <div class='actor-sub' style='line-height: 1.75; color: #374151;'>
-                다차원 화제성 지표는 <b>FUNDEX 인물 화제성점수</b>를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산합니다.<br>
-                합산점수는 <span style='color:#2456ff; font-weight:900;'>생산력 40% · 안정성 30% · 기여도 30%</span> 가중으로 산출합니다.
-                <hr style='border:none; border-top:1px solid #e5e7eb; margin:18px 0;'>
-                해당 지표는 배우 화제성을 단순 총량 순위로 보지 않고, 아래 세 축으로 나누어 다각도로 평가합니다.<br>
-                <ul style='margin-top:10px; padding-left:22px; color:#4b5563;'>
-                    <li style='margin-bottom:4px;'>얼마나 크게 성과를 내는지 <b>(생산력)</b></li>
-                    <li style='margin-bottom:4px;'>그 성과가 얼마나 꾸준한지 <b>(안정성)</b></li>
-                    <li style='margin-bottom:4px;'>작품 안에서 얼마나 중심적인 존재감을 보이는지 <b>(기여도)</b></li>
-                </ul>
-            </div>
-        </div>
-        """,
+        """<div class='card'>
+<div class='rep-title' style='font-size:1.1rem;'>1. 지표 구성 개요</div>
+<div class='actor-sub' style='line-height: 1.75; color: #374151;'>
+다차원 화제성 지표는 <b>FUNDEX 인물 화제성점수</b>를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산합니다.<br>
+합산점수는 <span style='color:#2456ff; font-weight:900;'>생산력 40% · 안정성 30% · 기여도 30%</span> 가중으로 산출합니다.
+<hr style='border:none; border-top:1px solid #e5e7eb; margin:18px 0;'>
+해당 지표는 배우 화제성을 단순 총량 순위로 보지 않고, 아래 세 축으로 나누어 다각도로 평가합니다.<br>
+<ul style='margin-top:10px; padding-left:22px; color:#4b5563;'>
+<li style='margin-bottom:4px;'>얼마나 크게 성과를 내는지 <b>(생산력)</b></li>
+<li style='margin-bottom:4px;'>그 성과가 얼마나 꾸준한지 <b>(안정성)</b></li>
+<li style='margin-bottom:4px;'>작품 안에서 얼마나 중심적인 존재감을 보이는지 <b>(기여도)</b></li>
+</ul>
+</div>
+</div>""",
         unsafe_allow_html=True,
     )
 
@@ -667,19 +665,16 @@ def render_reference():
 
     # 2-1. 생산력
     st.markdown(
-        """
-        <div class='summary-card' style='min-height:auto; padding:22px 26px;'>
-            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>💡 생산력</div>
-            <div class='actor-sub' style='line-height: 1.7;'>
-                <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
-                <b>배우가 만들어낸 화제성의 절대 규모</b> (배우 화제성 총합을 기준으로 전체 배우 내 상대적 위치 계산)
-                
-                <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0 6px 0;'>
-                    <b style='color:#0f172a; font-size:1rem;'>생산력</b> = 배우화제성의 전체 백분위
-                </div>
-            </div>
-        </div>
-        """,
+        """<div class='summary-card' style='min-height:auto; padding:22px 26px;'>
+<div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>💡 생산력</div>
+<div class='actor-sub' style='line-height: 1.7;'>
+<span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
+<b>배우가 만들어낸 화제성의 절대 규모</b> (배우 화제성 총합을 기준으로 전체 배우 내 상대적 위치 계산)
+<div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0 6px 0;'>
+<b style='color:#0f172a; font-size:1rem;'>생산력</b> = 배우화제성의 전체 백분위
+</div>
+</div>
+</div>""",
         unsafe_allow_html=True,
     )
 
@@ -687,34 +682,30 @@ def render_reference():
 
     # 2-2. 안정성
     st.markdown(
-        """
-        <div class='summary-card' style='min-height:auto; padding:22px 26px;'>
-            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>⚖️ 안정성</div>
-            <div class='actor-sub' style='line-height: 1.7;'>
-                <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
-                <b>여러 작품에서 얼마나 꾸준히 성과를 냈는지</b> (보정 작품평균, 히트 분산 보정, 작품수 보정, 대표작 성과를 함께 반영)
-                
-                <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0; color:#334155; font-family:monospace; font-size:0.95rem; line-height:1.6;'>
-                    <b style='color:#0f172a; font-size:1rem;'>안정성</b> = 꾸준함지수의 전체 백분위<br><br>
-                    <b style='color:#0f172a;'>꾸준함지수 = MIN( 1,</b><br>
-                    &nbsp;&nbsp;&nbsp;&nbsp;0.25 × 보정작품평균정규화<br>
-                    &nbsp;&nbsp;+ 0.55 × (0.7 × 히트분산정규화 + 0.3 × 작품수보정)<br>
-                    &nbsp;&nbsp;+ 0.20 × (대표작성과백분위³)<br>
-                    <b style='color:#0f172a;'>)</b>
-                </div>
-                
-                <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>세부 항목</span>
-                <ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.65;'>
-                    <li><b>보정작품평균정규화</b> = (보정작품평균 - 최소 보정작품평균) / (최대 보정작품평균 - 최소 보정작품평균)</li>
-                    <li><b>보정작품평균</b> = (배우화제성 + 3 × 전체 작품평균 평균) / (출연작품수 + 3)</li>
-                    <li><b>히트분산정규화</b> = (히트분산지수 - 최소 히트분산지수) / (최대 히트분산지수 - 최소 히트분산지수)</li>
-                    <li><b>히트분산지수</b> = 1 - (대표작성과 / 배우화제성)</li>
-                    <li><b>작품수보정</b> = 출연작품수 / (출연작품수 + 2)</li>
-                    <li><b>대표작성과백분위</b> = 대표작성과의 전체 백분위</li>
-                </ul>
-            </div>
-        </div>
-        """,
+        """<div class='summary-card' style='min-height:auto; padding:22px 26px;'>
+<div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>⚖️ 안정성</div>
+<div class='actor-sub' style='line-height: 1.7;'>
+<span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
+<b>여러 작품에서 얼마나 꾸준히 성과를 냈는지</b> (보정 작품평균, 히트 분산 보정, 작품수 보정, 대표작 성과를 함께 반영)
+<div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0; color:#334155; font-family:monospace; font-size:0.95rem; line-height:1.6;'>
+<b style='color:#0f172a; font-size:1rem;'>안정성</b> = 꾸준함지수의 전체 백분위<br><br>
+<b style='color:#0f172a;'>꾸준함지수 = MIN( 1,</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;0.25 × 보정작품평균정규화<br>
+&nbsp;&nbsp;+ 0.55 × (0.7 × 히트분산정규화 + 0.3 × 작품수보정)<br>
+&nbsp;&nbsp;+ 0.20 × (대표작성과백분위³)<br>
+<b style='color:#0f172a;'>)</b>
+</div>
+<span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>세부 항목</span>
+<ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.65;'>
+<li><b>보정작품평균정규화</b> = (보정작품평균 - 최소 보정작품평균) / (최대 보정작품평균 - 최소 보정작품평균)</li>
+<li><b>보정작품평균</b> = (배우화제성 + 3 × 전체 작품평균 평균) / (출연작품수 + 3)</li>
+<li><b>히트분산정규화</b> = (히트분산지수 - 최소 히트분산지수) / (최대 히트분산지수 - 최소 히트분산지수)</li>
+<li><b>히트분산지수</b> = 1 - (대표작성과 / 배우화제성)</li>
+<li><b>작품수보정</b> = 출연작품수 / (출연작품수 + 2)</li>
+<li><b>대표작성과백분위</b> = 대표작성과의 전체 백분위</li>
+</ul>
+</div>
+</div>""",
         unsafe_allow_html=True,
     )
 
@@ -722,31 +713,27 @@ def render_reference():
 
     # 2-3. 기여도
     st.markdown(
-        """
-        <div class='summary-card' style='min-height:auto; padding:22px 26px;'>
-            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>🎯 기여도</div>
-            <div class='actor-sub' style='line-height: 1.7;'>
-                <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
-                <b>작품 전체 성과 안에서 얼마나 중심적인 존재감을 보였는지</b> (작은 작품의 과대평가를 막기 위해 작품 체급 보정 추가 적용)
-                
-                <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0; color:#334155; font-family:monospace; font-size:0.95rem; line-height:1.6;'>
-                    <b style='color:#0f172a; font-size:1rem;'>기여도</b> = 최종기여도의 전체 백분위<br><br>
-                    <b style='color:#0f172a;'>최종기여도</b> = 보정기여도 × 작품체급보정<br><br>
-                    <b style='color:#0f172a;'>보정기여도 =</b><br>
-                    &nbsp;&nbsp;&nbsp;&nbsp;0.5 × 보정작품평균정규화<br>
-                    &nbsp;&nbsp;+ 0.5 × (화제성기여도 × (1위배율 + 2위배율 + 3위배율))
-                </div>
-                
-                <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>세부 항목</span>
-                <ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.65;'>
-                    <li><b>화제성기여도</b> = 배우화제성 / 드라마화제성</li>
-                    <li><b>1위/2위/3위배율</b> = (해당 순위 횟수 / 출연작품수)에 각각 가중치(1, 0.5, 0.3) 적용</li>
-                    <li><b>작품체급보정</b> = 0.45 + 0.55 × 작품체급백분위</li>
-                    <li><b>작품체급백분위</b> = 드라마화제성의 전체 백분위</li>
-                </ul>
-            </div>
-        </div>
-        """,
+        """<div class='summary-card' style='min-height:auto; padding:22px 26px;'>
+<div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>🎯 기여도</div>
+<div class='actor-sub' style='line-height: 1.7;'>
+<span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
+<b>작품 전체 성과 안에서 얼마나 중심적인 존재감을 보였는지</b> (작은 작품의 과대평가를 막기 위해 작품 체급 보정 추가 적용)
+<div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0; color:#334155; font-family:monospace; font-size:0.95rem; line-height:1.6;'>
+<b style='color:#0f172a; font-size:1rem;'>기여도</b> = 최종기여도의 전체 백분위<br><br>
+<b style='color:#0f172a;'>최종기여도</b> = 보정기여도 × 작품체급보정<br><br>
+<b style='color:#0f172a;'>보정기여도 =</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;0.5 × 보정작품평균정규화<br>
+&nbsp;&nbsp;+ 0.5 × (화제성기여도 × (1위배율 + 2위배율 + 3위배율))
+</div>
+<span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>세부 항목</span>
+<ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.65;'>
+<li><b>화제성기여도</b> = 배우화제성 / 드라마화제성</li>
+<li><b>1위/2위/3위배율</b> = (해당 순위 횟수 / 출연작품수)에 각각 가중치(1, 0.5, 0.3) 적용</li>
+<li><b>작품체급보정</b> = 0.45 + 0.55 × 작품체급백분위</li>
+<li><b>작품체급백분위</b> = 드라마화제성의 전체 백분위</li>
+</ul>
+</div>
+</div>""",
         unsafe_allow_html=True,
     )
 
@@ -756,47 +743,43 @@ def render_reference():
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
-            """
-            <div class='card'>
-                <div class='rep-title'>3. 최종 합산점수</div>
-                <div class='actor-sub' style='line-height: 1.7;'>
-                    <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>산식</span>
-                    <div style='background:#f1f5fb; border:1px solid #dbe4f3; border-radius:10px; padding:14px; margin-top:8px;'>
-                        <b style='color:#1f2937;'>합산점수</b> = 100 × (<br>
-                        &nbsp;&nbsp;0.4 × 생산력<br>
-                        &nbsp;&nbsp;+ 0.3 × 안정성<br>
-                        &nbsp;&nbsp;+ 0.3 × 기여도<br>
-                        )
-                    </div>
-                </div>
-            </div>
-            """,
+            """<div class='card'>
+<div class='rep-title'>3. 최종 합산점수</div>
+<div class='actor-sub' style='line-height: 1.7;'>
+<span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>산식</span>
+<div style='background:#f1f5fb; border:1px solid #dbe4f3; border-radius:10px; padding:14px; margin-top:8px;'>
+<b style='color:#1f2937;'>합산점수</b> = 100 × (<br>
+&nbsp;&nbsp;0.4 × 생산력<br>
+&nbsp;&nbsp;+ 0.3 × 안정성<br>
+&nbsp;&nbsp;+ 0.3 × 기여도<br>
+)
+</div>
+</div>
+</div>""",
             unsafe_allow_html=True,
         )
 
     with c2:
         st.markdown(
-            """
-            <div class='card'>
-                <div class='rep-title'>4. 등급 컷 기준</div>
-                <div class='actor-sub' style='display:flex; justify-content:space-between; line-height: 1.85;'>
-                    <div>
-                        <b>Top-S</b> : 상위 99% 이상<br>
-                        <b>Top-A</b> : 상위 97% 이상<br>
-                        <b>Top-B</b> : 상위 93% 이상<br>
-                        <b>Top-C</b> : 상위 85% 이상<br>
-                        <b>Middle-A</b> : 상위 70% 이상
-                    </div>
-                    <div>
-                        <b>Middle-B</b> : 상위 50% 이상<br>
-                        <b>Middle-C</b> : 상위 30% 이상<br>
-                        <b>Base-A</b> : 상위 15% 이상<br>
-                        <b>Base-B</b> : 상위 5% 이상<br>
-                        <b>Base-C</b> : 그 미만
-                    </div>
-                </div>
-            </div>
-            """,
+            """<div class='card'>
+<div class='rep-title'>4. 등급 컷 기준</div>
+<div class='actor-sub' style='display:flex; justify-content:space-between; line-height: 1.85;'>
+<div>
+<b>Top-S</b> : 상위 99% 이상<br>
+<b>Top-A</b> : 상위 97% 이상<br>
+<b>Top-B</b> : 상위 93% 이상<br>
+<b>Top-C</b> : 상위 85% 이상<br>
+<b>Middle-A</b> : 상위 70% 이상
+</div>
+<div>
+<b>Middle-B</b> : 상위 50% 이상<br>
+<b>Middle-C</b> : 상위 30% 이상<br>
+<b>Base-A</b> : 상위 15% 이상<br>
+<b>Base-B</b> : 상위 5% 이상<br>
+<b>Base-C</b> : 그 미만
+</div>
+</div>
+</div>""",
             unsafe_allow_html=True,
         )
 
