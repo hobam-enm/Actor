@@ -756,7 +756,7 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     with c2:
         fig_tier = make_triangle_chart(
             [row["생산_대분류내점수"], row["안정_대분류내점수"], row["기여_대분류내점수"]],
-            f"항목별 점수 · {row['대분류티어']} 기준",
+            f"항목별 점수 · {row['대분류티어']} 등급 기준",
         )
         st.plotly_chart(fig_tier, use_container_width=True)
 
