@@ -66,15 +66,22 @@ def inject_css():
         <style>
         .stApp {background: #f5f7fb;}
         
-[data-testid="stHeader"] {display:none;}
+[data-testid="stHeader"] {
+            background: rgba(245,247,251,0.85) !important;
+            backdrop-filter: blur(4px);
+            height: 44px;
+        }
+        [data-testid="stHeader"] > div {
+            height: 44px;
+        }
         [data-testid="stToolbar"] {display:none;}
         [data-testid="stDecoration"] {display:none;}
         [data-testid="stSidebarNav"] {display:none;}
-        [data-testid="collapsedControl"] {display:none !important;}
         .block-container {padding-top: 0.55rem; padding-bottom: 2rem; max-width: 1500px;}
         h1, h2, h3 {letter-spacing: -0.02em;}
         .page-title {font-size: 2.05rem; font-weight: 900; color:#1f2937; margin-bottom: 1.2rem;}
         .section-title {font-size: 1.35rem; font-weight: 900; color:#232b3a; margin: 0.2rem 0 0.95rem 0.15rem;}
+        .period-caption {font-size:0.84rem; color:#7b8495; margin: -0.35rem 0 1.1rem 0.15rem;}
         .spacer-lg {height: 24px;}
         .spacer-md {height: 14px;}
         .card {
@@ -255,9 +262,11 @@ def load_raw_from_gsheet() -> pd.DataFrame:
 
     header = [(c or "").strip() or f"unnamed_{i+1}" for i, c in enumerate(values[0])]
     rows = []
+    period_values = []
     max_len = len(header)
     for row in values[1:]:
         row = list(row)
+        period_values.append(str(row[0]).strip() if len(row) > 0 else "")
         if len(row) < max_len:
             row += [""] * (max_len - len(row))
         rows.append(row[:max_len])
@@ -268,7 +277,6 @@ def load_raw_from_gsheet() -> pd.DataFrame:
         st.error(f"RAW 시트에 필요한 컬럼이 없습니다: {missing}")
         st.stop()
 
-    period_values = [str(row[0]).strip() if len(row) > 0 else "" for row in rows]
     keep_cols = [c for c in [
         "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
     ] if c in df.columns]
@@ -571,13 +579,24 @@ def chip_html(label: str, grade: str) -> str:
 
 
 def parse_week_label(label: str):
-    m = re.search(r"(\d{2})년\s*(\d{1,2})월\s*(\d{1,2})째주", str(label).strip())
-    if not m:
+    s = str(label).strip()
+    if not s:
         return None
-    yy, mm, ww = map(int, m.groups())
-    year = 2000 + yy
-    return (year, mm, ww)
 
+    # 우선 "NN년 NN월 N째주" 계열을 직접 파싱
+    m = re.search(r"(\d{2})\s*년\s*(\d{1,2})\s*월\s*(\d{1,2})\s*(?:째주|주차|주)", s)
+    if m:
+        yy, mm, ww = map(int, m.groups())
+        return (2000 + yy, mm, ww)
+
+    # 한글/기호가 섞여 있어도 숫자 3개를 연-월-주로 해석
+    nums = re.findall(r"\d+", s)
+    if len(nums) >= 3:
+        yy, mm, ww = map(int, nums[:3])
+        if 0 <= yy <= 99 and 1 <= mm <= 12 and 1 <= ww <= 9:
+            return (2000 + yy, mm, ww)
+
+    return None
 
 def get_data_period_caption(raw_df: pd.DataFrame) -> str:
     if "__period_raw" not in raw_df.columns:
@@ -599,8 +618,7 @@ def render_reference():
             <div class='rep-title'>1. 기본 구조</div>
             <div class='actor-sub'>
             본 대시보드는 FUNDEX 인물 화제성점수를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
-            합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.<br>
-            주단위 인물화제성(드라마) Top20 이내에 랭크된 배우를 기준으로 합니다.
+            합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.
             </div>
             <div class='spacer-md'></div>
             <div class='rep-title'>2. 항목별 계산 개요</div>
@@ -659,7 +677,7 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>OVERVIEW</div>", unsafe_allow_html=True)
     period_caption = get_data_period_caption(raw_df)
     if period_caption:
-        st.caption(period_caption)
+        st.markdown(f"<div class='period-caption'>{period_caption}</div>", unsafe_allow_html=True)
     total_actors = result_df["배우"].nunique()
     total_programs = raw_df["프로그램명"].nunique()
     top_ratio = (result_df["대분류티어"] == "Top").mean() * 100
@@ -861,6 +879,7 @@ def main():
 
     raw_df = load_raw_from_gsheet()
     result_df = build_result_table(raw_df)
+
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
         page = st.radio("", ["OVERVIEW", "상세보기", "배우 모아보기", "참고사항"], index=0, label_visibility="collapsed")
