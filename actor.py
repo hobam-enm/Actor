@@ -750,9 +750,16 @@ def render_reference():
                 <b>산식</b><br>
                 합산점수 = 100 × (0.4 × 생산력 + 0.3 × 안정성 + 0.3 × 기여도)
             </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            <div class='spacer-lg'></div>
+    st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
 
+    st.markdown(
+        """
+        <div class='card'>
             <div class='rep-title'>4. 등급 컷</div>
             <div class='actor-sub'>
                 Top-S : 상위 99% 이상<br>
