@@ -669,7 +669,7 @@ def render_reference():
     st.markdown(
         """
         <div class='summary-card' style='min-height:auto; padding:22px 26px;'>
-            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>💡 생산력 <span style='color:#9ca3af; font-size:0.9rem; font-weight:600;'>Production</span></div>
+            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>💡 생산력</div>
             <div class='actor-sub' style='line-height: 1.7;'>
                 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
                 <b>배우가 만들어낸 화제성의 절대 규모</b> (배우 화제성 총합을 기준으로 전체 배우 내 상대적 위치 계산)
@@ -689,7 +689,7 @@ def render_reference():
     st.markdown(
         """
         <div class='summary-card' style='min-height:auto; padding:22px 26px;'>
-            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>⚖️ 안정성 <span style='color:#9ca3af; font-size:0.9rem; font-weight:600;'>Stability</span></div>
+            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>⚖️ 안정성</div>
             <div class='actor-sub' style='line-height: 1.7;'>
                 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
                 <b>여러 작품에서 얼마나 꾸준히 성과를 냈는지</b> (보정 작품평균, 히트 분산 보정, 작품수 보정, 대표작 성과를 함께 반영)
@@ -724,7 +724,7 @@ def render_reference():
     st.markdown(
         """
         <div class='summary-card' style='min-height:auto; padding:22px 26px;'>
-            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>🎯 기여도 <span style='color:#9ca3af; font-size:0.9rem; font-weight:600;'>Contribution</span></div>
+            <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>🎯 기여도</div>
             <div class='actor-sub' style='line-height: 1.7;'>
                 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
                 <b>작품 전체 성과 안에서 얼마나 중심적인 존재감을 보였는지</b> (작은 작품의 과대평가를 막기 위해 작품 체급 보정 추가 적용)
