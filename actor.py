@@ -117,67 +117,55 @@ def inject_css():
         }
         .stDataFrame {border-radius: 18px; overflow: hidden;}
         
-        section[data-testid="stSidebar"] {background:#f7f8fb; border-right:1px solid #e5e7eb;}
-        section[data-testid="stSidebar"] .block-container {padding-top:1.2rem;}
-        div[data-testid="stSidebarUserContent"] .stRadio > div {gap:0.25rem;}
-        div[data-testid="stSidebarUserContent"] .stRadio label {
-            background: transparent; border-top:1px solid #d8dde7; margin:0; padding:0.18rem 0;
-        }
-        div[data-testid="stSidebarUserContent"] .stRadio label:last-child {border-bottom:1px solid #d8dde7;}
-        div[data-testid="stSidebarUserContent"] .stRadio label > div:first-child {display:none;}
         section[data-testid="stSidebar"] {
-            min-width: 270px !important;
-            max-width: 270px !important;
+            background:#f7f8fb;
+            border-right:1px solid #e5e7eb;
+            min-width: 280px !important;
+            max-width: 280px !important;
         }
-        div[data-testid="stSidebarUserContent"] .stRadio {
-            width: 100%;
+        section[data-testid="stSidebar"] .block-container {
+            padding-top:1.2rem;
+            padding-left:0.5rem;
+            padding-right:0.5rem;
         }
+        div[data-testid="stSidebarUserContent"] .stRadio,
         div[data-testid="stSidebarUserContent"] .stRadio > div {
-            gap: 0 !important;
             width: 100%;
+            gap: 0 !important;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] {
-            display: flex !important;
-            align-items: stretch !important;
-            width: 100% !important;
-            margin: 0 !important;
-            padding: 0 !important;
-            border-top: 1px solid #d9dee8;
-            min-height: unset !important;
-            cursor: pointer !important;
+            display:flex !important;
+            width:100% !important;
+            margin:0 !important;
+            padding:0 !important;
+            border-top:1px solid #d9dee8;
+            cursor:pointer !important;
+            min-height:auto !important;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"]:last-of-type {
-            border-bottom: 1px solid #d9dee8;
+            border-bottom:1px solid #d9dee8;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] > div:first-child {
-            display: flex !important;
-            align-items: center !important;
-            justify-content: center !important;
-            width: 100% !important;
-            flex: 1 1 auto !important;
-            margin: 0 !important;
-        }
-        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] > div:first-child > div {
-            display: none !important;
+            display:none !important;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] p {
-            display: block !important;
-            width: 100% !important;
-            box-sizing: border-box !important;
-            font-size: 2rem !important;
-            font-weight: 900 !important;
-            color: #2f3848 !important;
-            text-align: center !important;
-            line-height: 1.15 !important;
-            margin: 0 !important;
-            padding: 1.2rem 0.6rem !important;
-            border-radius: 0 !important;
-            letter-spacing: -0.03em !important;
+            display:block !important;
+            width:100% !important;
+            margin:0 !important;
+            padding:1rem 0.75rem !important;
+            text-align:center !important;
+            font-size:1.05rem !important;
+            font-weight:800 !important;
+            line-height:1.25 !important;
+            color:#334155 !important;
+            white-space:nowrap !important;
+            word-break:keep-all !important;
+            letter-spacing:-0.02em !important;
+            box-sizing:border-box !important;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"]:has(input:checked) p {
-            background: #1f64f0 !important;
-            color: #ffffff !important;
-            border-radius: 0 !important;
+            background:#1f64f0 !important;
+            color:#ffffff !important;
         }
         .sidebar-footnote {color:#8b919c; font-size:0.9rem; margin-top:2rem;}
 
