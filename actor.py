@@ -209,6 +209,7 @@ def inject_css():
             color:#ffffff !important;
         }
         .sidebar-footnote {color:#8b919c; font-size:0.9rem; margin-top:2rem;}
+        .summary-card .actor-sub { line-height: 1.8; }
 
         </style>
         """,
@@ -615,34 +616,131 @@ def get_data_period_caption(raw_df: pd.DataFrame) -> str:
 
 def render_reference():
     st.markdown("<div class='section-title'>참고사항</div>", unsafe_allow_html=True)
+
     st.markdown(
         """
         <div class='card'>
-            <div class='rep-title'>1. 기본 구조</div>
+            <div class='rep-title'>1. 지표 구성 개요</div>
             <div class='actor-sub'>
-            본 대시보드는 FUNDEX 인물 화제성점수를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
-            합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.
+                다차원 화제성 지표는 <b>FUNDEX 인물 화제성점수</b>를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
+                합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.
+                <br><br>
+                해당 지표는 배우 화제성을 단순 총량 순위로 보지 않고,
+                <br>· 얼마나 크게 성과를 내는지 <b>(생산력)</b>
+                <br>· 그 성과가 얼마나 꾸준한지 <b>(안정성)</b>
+                <br>· 작품 안에서 얼마나 중심적인 존재감을 보이는지 <b>(기여도)</b>
+                <br>세 축으로 나누어 평가합니다.
             </div>
+
+            <div class='spacer-lg'></div>
+
+            <div class='rep-title'>2. 상세 지표 설명</div>
+
             <div class='spacer-md'></div>
-            <div class='rep-title'>2. 항목별 계산 개요</div>
-            <div class='actor-sub'>
-            <b>생산력</b>은 배우 화제성 규모와 대표작 성과를 중심으로 계산합니다.<br>
-            <b>안정성</b>은 작품수 보정, 작품평균, 꾸준함지수, 히트 분산 보정을 함께 반영합니다.<br>
-            <b>기여도</b>는 작품 내 존재감과 기여도를 계산하되, 작은 작품에서 과대평가되지 않도록 작품 체급 보정을 적용합니다.
+            <div class='summary-card' style='min-height:auto;'>
+                <div class='summary-title'>생산력</div>
+                <div class='actor-sub'>
+                    <b>정의</b><br>
+                    배우가 만들어낸 화제성의 절대 규모
+                    <br><br>
+                    <b>계산</b><br>
+                    배우 화제성 총합을 기준으로 전체 배우 내 상대적 위치 계산
+                    <br><br>
+                    <b>산식</b><br>
+                    생산력 = 배우화제성의 전체 백분위
+                </div>
             </div>
+
             <div class='spacer-md'></div>
-            <div class='rep-title'>3. 합산티어 컷</div>
+            <div class='summary-card' style='min-height:auto;'>
+                <div class='summary-title'>안정성</div>
+                <div class='actor-sub'>
+                    <b>정의</b><br>
+                    여러 작품에서 얼마나 꾸준히 성과를 냈는지
+                    <br><br>
+                    <b>계산</b><br>
+                    보정 작품평균, 히트 분산 보정, 작품수 보정, 대표작 성과를 함께 반영
+                    <br><br>
+                    <b>산식</b><br>
+                    안정성 = 꾸준함지수의 전체 백분위
+                    <br><br>
+                    꾸준함지수 = MIN(1,<br>
+                    &nbsp;&nbsp;0.25 × 보정작품평균정규화<br>
+                    &nbsp;&nbsp;+ 0.55 × (0.7 × 히트분산정규화 + 0.3 × 작품수보정)<br>
+                    &nbsp;&nbsp;+ 0.20 × (대표작성과백분위³)<br>
+                    )
+                    <br><br>
+                    <b>세부 항목</b><br>
+                    · 보정작품평균정규화 = (보정작품평균 - 전체 최소 보정작품평균) / (전체 최대 보정작품평균 - 전체 최소 보정작품평균)
+                    <br>
+                    · 보정작품평균 = (배우화제성 + 3 × 전체 작품평균 평균) / (출연작품수 + 3)
+                    <br>
+                    · 히트분산정규화 = (히트분산지수 - 전체 최소 히트분산지수) / (전체 최대 히트분산지수 - 전체 최소 히트분산지수)
+                    <br>
+                    · 히트분산지수 = 1 - (대표작성과 / 배우화제성)
+                    <br>
+                    · 작품수보정 = 출연작품수 / (출연작품수 + 2)
+                    <br>
+                    · 대표작성과백분위 = 대표작성과의 전체 백분위
+                </div>
+            </div>
+
+            <div class='spacer-md'></div>
+            <div class='summary-card' style='min-height:auto;'>
+                <div class='summary-title'>기여도</div>
+                <div class='actor-sub'>
+                    <b>정의</b><br>
+                    배우가 작품 전체 성과 안에서 얼마나 중심적인 존재감을 보였는지
+                    <br><br>
+                    <b>계산</b><br>
+                    작품 내 기여도와 상위 랭킹 비중을 반영하되, 작은 작품 과대평가를 막기 위해 작품 체급 보정을 추가 적용
+                    <br><br>
+                    <b>산식</b><br>
+                    기여도 = 최종기여도의 전체 백분위
+                    <br><br>
+                    최종기여도 = 보정기여도 × 작품체급보정
+                    <br><br>
+                    보정기여도 =<br>
+                    &nbsp;&nbsp;0.5 × 보정작품평균정규화<br>
+                    &nbsp;&nbsp;+ 0.5 × (화제성기여도 × (1위배율 + 2위배율 + 3위배율))
+                    <br><br>
+                    <b>세부 항목</b><br>
+                    · 화제성기여도 = 배우화제성 / 드라마화제성
+                    <br>
+                    · 1위배율 = 1위횟수 / 출연작품수
+                    <br>
+                    · 2위배율 = 0.5 × (2위횟수 / 출연작품수)
+                    <br>
+                    · 3위배율 = 0.3 × (3위횟수 / 출연작품수)
+                    <br>
+                    · 작품체급보정 = 0.45 + 0.55 × 작품체급백분위
+                    <br>
+                    · 작품체급백분위 = 드라마화제성의 전체 백분위
+                </div>
+            </div>
+
+            <div class='spacer-lg'></div>
+
+            <div class='rep-title'>3. 최종 합산점수</div>
             <div class='actor-sub'>
-            Top-S 99% 이상<br>
-            Top-A 97% 이상<br>
-            Top-B 93% 이상<br>
-            Top-C 85% 이상<br>
-            Middle-A 70% 이상<br>
-            Middle-B 50% 이상<br>
-            Middle-C 30% 이상<br>
-            Base-A 15% 이상<br>
-            Base-B 5% 이상<br>
-            Base-C 5% 미만
+                <b>산식</b><br>
+                합산점수 = 100 × (0.4 × 생산력 + 0.3 × 안정성 + 0.3 × 기여도)
+            </div>
+
+            <div class='spacer-lg'></div>
+
+            <div class='rep-title'>4. 등급 컷</div>
+            <div class='actor-sub'>
+                Top-S : 상위 99% 이상<br>
+                Top-A : 상위 97% 이상<br>
+                Top-B : 상위 93% 이상<br>
+                Top-C : 상위 85% 이상<br>
+                Middle-A : 상위 70% 이상<br>
+                Middle-B : 상위 50% 이상<br>
+                Middle-C : 상위 30% 이상<br>
+                Base-A : 상위 15% 이상<br>
+                Base-B : 상위 5% 이상<br>
+                Base-C : 그 미만
             </div>
         </div>
         """,
