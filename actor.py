@@ -125,11 +125,39 @@ def inject_css():
         }
         div[data-testid="stSidebarUserContent"] .stRadio label:last-child {border-bottom:1px solid #d8dde7;}
         div[data-testid="stSidebarUserContent"] .stRadio label > div:first-child {display:none;}
-        div[data-testid="stSidebarUserContent"] .stRadio label p {
-            font-size: 1.45rem; font-weight:800; color:#3f4652; text-align:center; margin:0; width:100%; padding:0.95rem 0; border-radius:0;
+        div[data-testid="stSidebarUserContent"] .stRadio > div {
+            gap: 0 !important;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] {
+            display:flex !important;
+            width:100% !important;
+            margin:0 !important;
+            padding:0 !important;
+            border-top:1px solid #d9dee8;
+            min-height:unset !important;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"]:last-of-type {
+            border-bottom:1px solid #d9dee8;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] > div {
+            display:none !important;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] p {
+            display:block !important;
+            width:100% !important;
+            box-sizing:border-box;
+            font-size: 1.45rem;
+            font-weight:800;
+            color:#3f4652;
+            text-align:center;
+            margin:0;
+            padding:1.05rem 0;
+            border-radius:0;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"]:has(input:checked) p {
-            background:#1f64f0; color:#ffffff; border-radius:0;
+            background:#1f64f0;
+            color:#ffffff;
+            border-radius:0;
         }
         .sidebar-footnote {color:#8b919c; font-size:0.9rem; margin-top:2rem;}
 
@@ -478,7 +506,7 @@ def table_styler(df: pd.DataFrame):
 
 
 def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
-    st.markdown("<div class='section-title'>Overview</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>OVERVIEW</div>", unsafe_allow_html=True)
     total_actors = result_df["배우"].nunique()
     total_programs = raw_df["프로그램명"].nunique()
     top_ratio = (result_df["대분류티어"] == "Top").mean() * 100
@@ -683,10 +711,10 @@ def main():
 
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-        page = st.radio("", ["overview", "상세보기", "배우 모아보기"], index=0, label_visibility="collapsed")
+        page = st.radio("", ["OVERVIEW", "상세보기", "배우 모아보기"], index=0, label_visibility="collapsed")
         st.markdown("<div class='sidebar-footnote'>문의 : 미디어마케팅팀 데이터인사이트파트</div>", unsafe_allow_html=True)
 
-    if page == "overview":
+    if page == "OVERVIEW":
         render_overview(raw_df, result_df)
     elif page == "상세보기":
         render_detail(raw_df, result_df)
