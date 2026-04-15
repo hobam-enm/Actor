@@ -533,13 +533,12 @@ def get_data_period_caption(raw_df: pd.DataFrame) -> str:
 
 def render_reference():
     st.markdown("<div class='section-title'>참고사항</div>", unsafe_allow_html=True)
-    st.caption("지표 산식과 등급 해석이 궁금한 경우에만 보는 참고 페이지입니다.")
     st.markdown(
         """
         <div class='card'>
             <div class='rep-title'>1. 기본 구조</div>
             <div class='actor-sub'>
-            본 대시보드는 RAW 시트를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
+            본 대시보드는 펀덱스 배우 화제성 점수를 바탕으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
             합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.
             </div>
             <div class='spacer-md'></div>
@@ -562,12 +561,6 @@ def render_reference():
             Base-A 15% 이상<br>
             Base-B 5% 이상<br>
             Base-C 5% 미만
-            </div>
-            <div class='spacer-md'></div>
-            <div class='rep-title'>4. 항목별 등급 해석</div>
-            <div class='actor-sub'>
-            생산력등급, 안정성등급, 기여도등급은 각 항목 백분율을 기준으로 동일한 컷 구조를 적용합니다.
-            상세보기 페이지에서는 전체 기준 점수와 함께 <b>Top / Middle / Base 내부 상대점수</b>도 함께 제공합니다.
             </div>
         </div>
         """,
