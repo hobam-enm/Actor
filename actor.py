@@ -632,96 +632,119 @@ def render_reference():
                 <br>· 작품 안에서 얼마나 중심적인 존재감을 보이는지 <b>(기여도)</b>
                 <br>세 축으로 나누어 평가합니다.
             </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            <div class='spacer-lg'></div>
+    st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='rep-title'>2. 상세 지표 설명</div>", unsafe_allow_html=True)
+    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
 
-            <div class='rep-title'>2. 상세 지표 설명</div>
-
-            <div class='spacer-md'></div>
-            <div class='summary-card' style='min-height:auto;'>
-                <div class='summary-title'>생산력</div>
-                <div class='actor-sub'>
-                    <b>정의</b><br>
-                    배우가 만들어낸 화제성의 절대 규모
-                    <br><br>
-                    <b>계산</b><br>
-                    배우 화제성 총합을 기준으로 전체 배우 내 상대적 위치 계산
-                    <br><br>
-                    <b>산식</b><br>
-                    생산력 = 배우화제성의 전체 백분위
-                </div>
+    st.markdown(
+        """
+        <div class='summary-card' style='min-height:auto;'>
+            <div class='summary-title'>생산력</div>
+            <div class='actor-sub'>
+                <b>정의</b><br>
+                배우가 만들어낸 화제성의 절대 규모
+                <br><br>
+                <b>계산</b><br>
+                배우 화제성 총합을 기준으로 전체 배우 내 상대적 위치 계산
+                <br><br>
+                <b>산식</b><br>
+                생산력 = 배우화제성의 전체 백분위
             </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            <div class='spacer-md'></div>
-            <div class='summary-card' style='min-height:auto;'>
-                <div class='summary-title'>안정성</div>
-                <div class='actor-sub'>
-                    <b>정의</b><br>
-                    여러 작품에서 얼마나 꾸준히 성과를 냈는지
-                    <br><br>
-                    <b>계산</b><br>
-                    보정 작품평균, 히트 분산 보정, 작품수 보정, 대표작 성과를 함께 반영
-                    <br><br>
-                    <b>산식</b><br>
-                    안정성 = 꾸준함지수의 전체 백분위
-                    <br><br>
-                    꾸준함지수 = MIN(1,<br>
-                    &nbsp;&nbsp;0.25 × 보정작품평균정규화<br>
-                    &nbsp;&nbsp;+ 0.55 × (0.7 × 히트분산정규화 + 0.3 × 작품수보정)<br>
-                    &nbsp;&nbsp;+ 0.20 × (대표작성과백분위³)<br>
-                    )
-                    <br><br>
-                    <b>세부 항목</b><br>
-                    · 보정작품평균정규화 = (보정작품평균 - 전체 최소 보정작품평균) / (전체 최대 보정작품평균 - 전체 최소 보정작품평균)
-                    <br>
-                    · 보정작품평균 = (배우화제성 + 3 × 전체 작품평균 평균) / (출연작품수 + 3)
-                    <br>
-                    · 히트분산정규화 = (히트분산지수 - 전체 최소 히트분산지수) / (전체 최대 히트분산지수 - 전체 최소 히트분산지수)
-                    <br>
-                    · 히트분산지수 = 1 - (대표작성과 / 배우화제성)
-                    <br>
-                    · 작품수보정 = 출연작품수 / (출연작품수 + 2)
-                    <br>
-                    · 대표작성과백분위 = 대표작성과의 전체 백분위
-                </div>
+    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div class='summary-card' style='min-height:auto;'>
+            <div class='summary-title'>안정성</div>
+            <div class='actor-sub'>
+                <b>정의</b><br>
+                여러 작품에서 얼마나 꾸준히 성과를 냈는지
+                <br><br>
+                <b>계산</b><br>
+                보정 작품평균, 히트 분산 보정, 작품수 보정, 대표작 성과를 함께 반영
+                <br><br>
+                <b>산식</b><br>
+                안정성 = 꾸준함지수의 전체 백분위
+                <br><br>
+                꾸준함지수 = MIN(1,<br>
+                &nbsp;&nbsp;0.25 × 보정작품평균정규화<br>
+                &nbsp;&nbsp;+ 0.55 × (0.7 × 히트분산정규화 + 0.3 × 작품수보정)<br>
+                &nbsp;&nbsp;+ 0.20 × (대표작성과백분위³)<br>
+                )
+                <br><br>
+                <b>세부 항목</b><br>
+                · 보정작품평균정규화 = (보정작품평균 - 전체 최소 보정작품평균) / (전체 최대 보정작품평균 - 전체 최소 보정작품평균)
+                <br>
+                · 보정작품평균 = (배우화제성 + 3 × 전체 작품평균 평균) / (출연작품수 + 3)
+                <br>
+                · 히트분산정규화 = (히트분산지수 - 전체 최소 히트분산지수) / (전체 최대 히트분산지수 - 전체 최소 히트분산지수)
+                <br>
+                · 히트분산지수 = 1 - (대표작성과 / 배우화제성)
+                <br>
+                · 작품수보정 = 출연작품수 / (출연작품수 + 2)
+                <br>
+                · 대표작성과백분위 = 대표작성과의 전체 백분위
             </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            <div class='spacer-md'></div>
-            <div class='summary-card' style='min-height:auto;'>
-                <div class='summary-title'>기여도</div>
-                <div class='actor-sub'>
-                    <b>정의</b><br>
-                    배우가 작품 전체 성과 안에서 얼마나 중심적인 존재감을 보였는지
-                    <br><br>
-                    <b>계산</b><br>
-                    작품 내 기여도와 상위 랭킹 비중을 반영하되, 작은 작품 과대평가를 막기 위해 작품 체급 보정을 추가 적용
-                    <br><br>
-                    <b>산식</b><br>
-                    기여도 = 최종기여도의 전체 백분위
-                    <br><br>
-                    최종기여도 = 보정기여도 × 작품체급보정
-                    <br><br>
-                    보정기여도 =<br>
-                    &nbsp;&nbsp;0.5 × 보정작품평균정규화<br>
-                    &nbsp;&nbsp;+ 0.5 × (화제성기여도 × (1위배율 + 2위배율 + 3위배율))
-                    <br><br>
-                    <b>세부 항목</b><br>
-                    · 화제성기여도 = 배우화제성 / 드라마화제성
-                    <br>
-                    · 1위배율 = 1위횟수 / 출연작품수
-                    <br>
-                    · 2위배율 = 0.5 × (2위횟수 / 출연작품수)
-                    <br>
-                    · 3위배율 = 0.3 × (3위횟수 / 출연작품수)
-                    <br>
-                    · 작품체급보정 = 0.45 + 0.55 × 작품체급백분위
-                    <br>
-                    · 작품체급백분위 = 드라마화제성의 전체 백분위
-                </div>
+    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div class='summary-card' style='min-height:auto;'>
+            <div class='summary-title'>기여도</div>
+            <div class='actor-sub'>
+                <b>정의</b><br>
+                배우가 작품 전체 성과 안에서 얼마나 중심적인 존재감을 보였는지
+                <br><br>
+                <b>계산</b><br>
+                작품 내 기여도와 상위 랭킹 비중을 반영하되, 작은 작품 과대평가를 막기 위해 작품 체급 보정을 추가 적용
+                <br><br>
+                <b>산식</b><br>
+                기여도 = 최종기여도의 전체 백분위
+                <br><br>
+                최종기여도 = 보정기여도 × 작품체급보정
+                <br><br>
+                보정기여도 =<br>
+                &nbsp;&nbsp;0.5 × 보정작품평균정규화<br>
+                &nbsp;&nbsp;+ 0.5 × (화제성기여도 × (1위배율 + 2위배율 + 3위배율))
+                <br><br>
+                <b>세부 항목</b><br>
+                · 화제성기여도 = 배우화제성 / 드라마화제성
+                <br>
+                · 1위배율 = 1위횟수 / 출연작품수
+                <br>
+                · 2위배율 = 0.5 × (2위횟수 / 출연작품수)
+                <br>
+                · 3위배율 = 0.3 × (3위횟수 / 출연작품수)
+                <br>
+                · 작품체급보정 = 0.45 + 0.55 × 작품체급백분위
+                <br>
+                · 작품체급백분위 = 드라마화제성의 전체 백분위
             </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            <div class='spacer-lg'></div>
+    st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
 
+    st.markdown(
+        """
+        <div class='card'>
             <div class='rep-title'>3. 최종 합산점수</div>
             <div class='actor-sub'>
                 <b>산식</b><br>
