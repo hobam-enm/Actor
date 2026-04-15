@@ -209,6 +209,7 @@ def inject_css():
             color:#ffffff !important;
         }
         .sidebar-footnote {color:#8b919c; font-size:0.9rem; margin-top:2rem;}
+        
         .summary-card .actor-sub { line-height: 1.8; }
 
         </style>
