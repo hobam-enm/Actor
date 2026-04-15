@@ -593,8 +593,14 @@ def parse_week_label(label: str):
             yy = int(nums[0])
             mm = int(nums[1])
             ww = int(nums[2])
-            if 0 <= yy <= 99 and 1 <= mm <= 12 and 1 <= ww <= 12:
-                return (2000 + yy, mm, ww)
+            
+            # 연도가 2자리(예: 26)로 들어오면 4자리(2026)로 변환, 4자리면 그대로 사용
+            if yy < 100:
+                yy += 2000
+                
+            # 정상적인 연/월/주 범위인지 체크 (2000~2100년 지원)
+            if 2000 <= yy <= 2100 and 1 <= mm <= 12 and 1 <= ww <= 6:
+                return (yy, mm, ww)
         except Exception:
             return None
     return None
