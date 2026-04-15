@@ -283,7 +283,7 @@ def load_raw_from_gsheet() -> pd.DataFrame:
         "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
     ] if c in df.columns]
     df = df[keep_cols].copy()
-    df["__period_raw"] = pd.Series(period_values[:len(df)], index=df.index).astype(str).str.strip()
+    df["__period_raw"] = "||".join(period_values)
 
     for col in ["인물명", "프로그램명"]:
         df[col] = df[col].astype(str).str.strip()
