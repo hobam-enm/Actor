@@ -274,8 +274,8 @@ def load_raw_from_gsheet() -> pd.DataFrame:
     try:
         ws_source = sh.worksheet("source")
         source_values = ws_source.get_all_values()
-        # source 시트의 2번째 행(데이터 시작)부터 A열(첫 번째 열) 값을 기간으로 사용
-        period_values = [str(row[0]).strip() if len(row) > 0 else "" for row in source_values[1:]]
+        # 공백이 아닌 기간 데이터만 중복 없이 리스트로 추출
+        period_values = list(set([str(row[0]).strip() for row in source_values[1:] if len(row) > 0 and str(row[0]).strip() != ""]))
     except Exception:
         period_values = []
 
@@ -615,7 +615,13 @@ def get_data_period_caption(raw_df: pd.DataFrame) -> str:
     if vals.empty:
         return ""
 
-    unique_vals = pd.Series(pd.unique(vals))
+    # "||"로 묶어둔 전체 기간 데이터를 분리
+    raw_str = vals.iloc[0]
+    if "||" in raw_str:
+        unique_vals = raw_str.split("||")
+    else:
+        unique_vals = pd.unique(vals).tolist()
+
     parsed = []
     for v in unique_vals:
         key = parse_week_label(v)
@@ -623,11 +629,11 @@ def get_data_period_caption(raw_df: pd.DataFrame) -> str:
             parsed.append((key, v))
 
     if parsed:
+        # 튜플 (연, 월, 주) 순으로 정렬하여 가장 빠른/늦은 날짜 추출
         parsed.sort(key=lambda x: x[0])
         return f"데이터 기준 기간 · {parsed[0][1]} ~ {parsed[-1][1]}"
 
-    # 파싱이 전부 실패하면 원본 첫값/마지막값 그대로라도 표기
-    return f"데이터 기준 기간 · {unique_vals.iloc[0]} ~ {unique_vals.iloc[-1]}"
+    return f"데이터 기준 기간 · {unique_vals[0]} ~ {unique_vals[-1]}"
 
 
 def render_reference():
