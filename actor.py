@@ -64,7 +64,11 @@ def inject_css():
         """
         <style>
         .stApp {background: #f5f7fb;}
-        .block-container {padding-top: 1.1rem; padding-bottom: 2rem; max-width: 1500px;}
+        [data-testid="stHeader"] {display:none;}
+        [data-testid="stToolbar"] {display:none;}
+        [data-testid="stDecoration"] {display:none;}
+        [data-testid="stSidebarNav"] {display:none;}
+        .block-container {padding-top: 0.55rem; padding-bottom: 2rem; max-width: 1500px;}
         h1, h2, h3 {letter-spacing: -0.02em;}
         .page-title {font-size: 2.05rem; font-weight: 900; color:#1f2937; margin-bottom: 1.2rem;}
         .section-title {font-size: 1.35rem; font-weight: 900; color:#232b3a; margin: 0.2rem 0 0.95rem 0.15rem;}
@@ -112,6 +116,23 @@ def inject_css():
             border-radius: 14px !important;
         }
         .stDataFrame {border-radius: 18px; overflow: hidden;}
+        
+        section[data-testid="stSidebar"] {background:#f7f8fb; border-right:1px solid #e5e7eb;}
+        section[data-testid="stSidebar"] .block-container {padding-top:1.2rem;}
+        div[data-testid="stSidebarUserContent"] .stRadio > div {gap:0.25rem;}
+        div[data-testid="stSidebarUserContent"] .stRadio label {
+            background: transparent; border-top:1px solid #d8dde7; margin:0; padding:0.18rem 0;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio label:last-child {border-bottom:1px solid #d8dde7;}
+        div[data-testid="stSidebarUserContent"] .stRadio label > div:first-child {display:none;}
+        div[data-testid="stSidebarUserContent"] .stRadio label p {
+            font-size: 1.45rem; font-weight:800; color:#3f4652; text-align:center; margin:0; width:100%; padding:0.95rem 0; border-radius:0;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"]:has(input:checked) p {
+            background:#1f64f0; color:#ffffff; border-radius:0;
+        }
+        .sidebar-footnote {color:#8b919c; font-size:0.9rem; margin-top:2rem;}
+
         </style>
         """,
         unsafe_allow_html=True,
@@ -446,7 +467,7 @@ def table_styler(df: pd.DataFrame):
 
     styler = (
         show.style
-        .applymap(bg_color, subset=["합산티어", "생산력등급", "안정성등급", "기여도등급"])
+        .map(bg_color, subset=["합산티어", "생산력등급", "안정성등급", "기여도등급"])
         .set_properties(subset=["합산티어"], **{"font-weight": "900"})
         .set_table_styles([
             {"selector": "th", "props": [("background-color", "#f1f5fb"), ("color", "#374151"), ("font-weight", "800")]},
@@ -521,12 +542,7 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>배우 상세 보기</div>", unsafe_allow_html=True)
     st.markdown("<div class='select-hint'>배우명을 검색해서 원하는 배우를 선택해 주세요.</div>", unsafe_allow_html=True)
     names = result_df["배우"].tolist()
-    keyword = st.text_input("배우 검색", placeholder="배우명 입력")
-    filtered_names = [n for n in names if keyword.strip().lower() in n.lower()] if keyword.strip() else names
-    if not filtered_names:
-        st.info("검색 결과가 없습니다.")
-        return
-    selected_actor = st.selectbox("배우 선택", filtered_names, index=0)
+    selected_actor = st.selectbox("배우 선택", names, index=0, placeholder="배우명을 검색해 선택")
     row = result_df[result_df["배우"] == selected_actor].iloc[0]
 
     actor_summary_card(row)
@@ -545,6 +561,14 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         )
         st.plotly_chart(fig_tier, use_container_width=True)
 
+    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>대표출연작</div>", unsafe_allow_html=True)
+    actor_programs = build_actor_program_summary(raw_df, selected_actor).head(6)
+    cols = st.columns(3)
+    for idx, r in actor_programs.iterrows():
+        with cols[idx % 3]:
+            work_card(r["프로그램명"], r["드라마화제성"], r["배우화제성"])
+
     st.markdown("<div class='section-title'>유사티어 배우</div>", unsafe_allow_html=True)
     sim = similar_tier_actors(result_df, row, 4)
     cols = st.columns(4)
@@ -560,14 +584,6 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
                 """,
                 unsafe_allow_html=True,
             )
-
-    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>대표출연작</div>", unsafe_allow_html=True)
-    actor_programs = build_actor_program_summary(raw_df, selected_actor).head(6)
-    cols = st.columns(3)
-    for idx, r in actor_programs.iterrows():
-        with cols[idx % 3]:
-            work_card(r["프로그램명"], r["드라마화제성"], r["배우화제성"])
 
 
 def compare_table_rows(result_df: pd.DataFrame, names: List[str]) -> pd.DataFrame:
@@ -585,21 +601,36 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
     selected_names: List[str] = []
     if mode == "작품 검색해서 모아보기":
-        keyword = st.text_input("작품 검색", placeholder="프로그램명 입력")
-        if keyword.strip():
-            matched = raw_df[raw_df["프로그램명"].str.contains(keyword.strip(), case=False, na=False)]
-            selected_names = matched["인물명"].dropna().unique().tolist()
-        else:
-            selected_names = []
+        program_list = sorted(raw_df["프로그램명"].dropna().astype(str).unique().tolist())
+        selected_program = st.selectbox("작품 선택", program_list, index=0, placeholder="작품명을 검색해 선택")
+        matched = raw_df[raw_df["프로그램명"] == selected_program]
+        selected_names = matched["인물명"].dropna().astype(str).unique().tolist()
+        st.caption(f"선택 작품: {selected_program} · 배우 {len(selected_names)}명")
     elif mode == "등급 안에서 비교하기":
-        grade = st.selectbox("합산티어 선택", GRADE_ORDER)
-        selected_names = result_df[result_df["합산티어"] == grade]["배우"].tolist()[:20]
+        c1, c2 = st.columns(2)
+        tier_type_options = {
+            "합산티어": "합산티어",
+            "생산력등급": "생산력등급",
+            "안정성등급": "안정성등급",
+            "기여도등급": "기여도등급",
+        }
+        with c1:
+            tier_field_label = st.selectbox("비교 기준", list(tier_type_options.keys()), index=0)
+        with c2:
+            tier_field = tier_type_options[tier_field_label]
+            available = [g for g in GRADE_ORDER if g in result_df[tier_field].dropna().unique().tolist()]
+            selected_grade = st.selectbox("등급 선택", available, index=0)
+        filtered = result_df[result_df[tier_field] == selected_grade].copy().sort_values(["합산점수", "배우화제성"], ascending=[False, False])
+        selected_names = filtered["배우"].tolist()[:20]
+        st.caption(f"{tier_field_label}: {selected_grade} · {len(filtered):,}명 중 상위 20명 표시")
     else:
+        names = result_df["배우"].tolist()
         left, right = st.columns(2)
         with left:
-            actor1 = st.selectbox("배우 1", result_df["배우"].tolist(), index=0)
+            actor1 = st.selectbox("배우 1", names, index=0, placeholder="배우명 검색")
         with right:
-            actor2 = st.selectbox("배우 2", result_df["배우"].tolist(), index=1 if len(result_df) > 1 else 0)
+            default_idx = 1 if len(names) > 1 else 0
+            actor2 = st.selectbox("배우 2", names, index=default_idx, placeholder="배우명 검색")
         selected_names = [a for a in [actor1, actor2] if a]
 
     if not selected_names:
@@ -612,33 +643,36 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
     chart_names = comp_df["배우"].tolist()[:8]
     fig = go.Figure()
+    all_values = []
     for name in chart_names:
         r = result_df[result_df["배우"] == name].iloc[0]
+        vals = [r["생산_전체점수"], r["안정_전체점수"], r["기여_전체점수"], r["생산_전체점수"]]
+        all_values.extend(vals[:-1])
         fig.add_trace(
             go.Scatterpolar(
-                r=[r["생산_전체점수"], r["안정_전체점수"], r["기여_전체점수"], r["생산_전체점수"]],
+                r=vals,
                 theta=["생산력", "안정성", "기여도", "생산력"],
                 mode="lines+markers",
+                line=dict(width=3),
+                marker=dict(size=8),
                 name=name,
             )
         )
+    if mode == "배우 직접 선택 1대1 비교" and len(chart_names) == 2 and all_values:
+        rmin, rmax = min(all_values), max(all_values)
+        pad = max(6, (rmax - rmin) * 0.45)
+        low = max(0, math.floor((rmin - pad) / 5) * 5)
+        high = min(100, math.ceil((rmax + pad) / 5) * 5)
+    else:
+        low, high = 0, 100
     fig.update_layout(
         title="선택 배우 비교 · 항목별 점수",
         height=430,
         margin=dict(l=20, r=20, t=50, b=20),
-        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+        polar=dict(radialaxis=dict(visible=True, range=[low, high])),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     st.plotly_chart(fig, use_container_width=True)
-
-    if mode == "작품 검색해서 모아보기":
-        st.markdown("<div class='section-title'>대표출연작 참고</div>", unsafe_allow_html=True)
-        top_programs = raw_df[raw_df["인물명"].isin(comp_df["배우"])]
-        tops = top_programs.groupby("프로그램명", as_index=False)[["드라마화제성", "배우화제성"]].sum().sort_values("배우화제성", ascending=False).head(6)
-        cols = st.columns(3)
-        for idx, r in tops.iterrows():
-            with cols[idx % 3]:
-                work_card(r["프로그램명"], r["드라마화제성"], r["배우화제성"])
-
 
 def main():
     inject_css()
@@ -647,7 +681,10 @@ def main():
     raw_df = load_raw_from_gsheet()
     result_df = build_result_table(raw_df)
 
-    page = st.sidebar.radio("페이지", ["overview", "상세보기", "배우 모아보기"], index=0)
+    with st.sidebar:
+        st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
+        page = st.radio("", ["overview", "상세보기", "배우 모아보기"], index=0, label_visibility="collapsed")
+        st.markdown("<div class='sidebar-footnote'>문의 : 미디어마케팅팀 데이터인사이트파트</div>", unsafe_allow_html=True)
 
     if page == "overview":
         render_overview(raw_df, result_df)
