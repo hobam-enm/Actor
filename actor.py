@@ -1,4 +1,5 @@
 import math
+import re
 from typing import Dict, List, Tuple
 
 import gspread
@@ -93,7 +94,7 @@ def inject_css():
             background:#fff; border:1px solid #e7ebf3; border-radius:16px; padding:12px 14px;
             box-shadow: 0 6px 18px rgba(31,41,55,0.04); min-height: 88px;
         }
-        .chip {display:inline-block; padding:5px 10px; border-radius:999px; color:#fff; font-size:0.78rem; font-weight:800;}
+        .chip {display:inline-block; padding:5px 10px; border-radius:999px; font-size:0.78rem; font-weight:800;}
         .actor-name {font-size:1.05rem; font-weight:900; color:#111827; margin:8px 0 6px 0;}
         .actor-sub {font-size:0.84rem; color:#6b7280; line-height:1.55;}
         .rep-card {
@@ -226,10 +227,15 @@ def load_raw_from_gsheet() -> pd.DataFrame:
         st.error(f"RAW 시트에 필요한 컬럼이 없습니다: {missing}")
         st.stop()
 
+    period_source_col = header[0] if header else None
     keep_cols = [c for c in [
         "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
     ] if c in df.columns]
+    if period_source_col and period_source_col in df.columns:
+        keep_cols = [period_source_col] + keep_cols
     df = df[keep_cols].copy()
+    if period_source_col and period_source_col in df.columns:
+        df["__period_raw"] = df[period_source_col].astype(str).str.strip()
 
     for col in ["인물명", "프로그램명"]:
         df[col] = df[col].astype(str).str.strip()
@@ -387,7 +393,7 @@ def top10_card(rank: int, name: str, tier: str, score: float):
     st.markdown(
         f"""
         <div class='tiny-card'>
-            <span class='chip' style='background:{bg};'>{rank}위 · {tier}</span>
+            {chip_html(f"{rank}위 · {tier}", tier)}
             <div class='actor-name' style='font-size:0.98rem; margin-top:10px;'>{name}</div>
             <div class='actor-sub'>합산점수 {format_score(score)}</div>
         </div>
@@ -404,7 +410,7 @@ def representative_card(grade: str, rows: pd.DataFrame):
     st.markdown(
         f"""
         <div class='rep-card'>
-            <div class='rep-title'><span class='chip' style='background:{bg}; margin-right:8px;'>{grade}</span></div>
+            <div class='rep-title'>{chip_html(grade, grade)}</div>
             {lines if lines else "<div class='actor-sub'>해당 배우 없음</div>"}
         </div>
         """,
@@ -433,10 +439,10 @@ def actor_summary_card(row: pd.Series):
         f"""
         <div class='card'>
             <div style='display:flex; gap:8px; align-items:center; flex-wrap:wrap;'>
-              <span class='chip' style='background:{tier_color};'>합산 {row['합산티어']}</span>
-              <span class='chip' style='background:{GRADE_BG.get(row['생산력등급'],'#64748b')};'>생산 {row['생산력등급']}</span>
-              <span class='chip' style='background:{GRADE_BG.get(row['안정성등급'],'#64748b')};'>안정 {row['안정성등급']}</span>
-              <span class='chip' style='background:{GRADE_BG.get(row['기여도등급'],'#64748b')};'>기여 {row['기여도등급']}</span>
+              {chip_html(f"합산 {row['합산티어']}", row['합산티어'])}
+              {chip_html(f"생산 {row['생산력등급']}", row['생산력등급'])}
+              {chip_html(f"안정 {row['안정성등급']}", row['안정성등급'])}
+              {chip_html(f"기여 {row['기여도등급']}", row['기여도등급'])}
             </div>
             <div class='actor-name' style='font-size:1.45rem; margin-top:14px;'>{row['배우']}</div>
             <div class='actor-sub' style='font-size:0.95rem;'>합산점수 <b>{format_score(row['합산점수'])}</b> · 배우화제성 <b>{format_int(row['배우화제성'])}</b> · 출연작품수 <b>{format_int(row['출연작품수'])}</b></div>
@@ -487,6 +493,83 @@ def make_triangle_chart(values: List[float], title: str):
     return fig
 
 
+
+
+def grade_text_color(grade: str) -> str:
+    grade = str(grade)
+    return "#374151" if grade.endswith("C") else "#ffffff"
+
+
+def chip_html(label: str, grade: str) -> str:
+    bg = GRADE_BG.get(str(grade), "#64748b")
+    fg = grade_text_color(str(grade))
+    return f"<span class='chip' style='background:{bg}; color:{fg};'>{label}</span>"
+
+
+def parse_week_label(label: str):
+    m = re.search(r"(\d{2})년\s*(\d{1,2})월\s*(\d)째주", str(label))
+    if not m:
+        return None
+    yy, mm, ww = map(int, m.groups())
+    year = 2000 + yy
+    return (year, mm, ww)
+
+
+def get_data_period_caption(raw_df: pd.DataFrame) -> str:
+    if "__period_raw" not in raw_df.columns:
+        return ""
+    raw_vals = raw_df["__period_raw"].dropna().astype(str).str.strip()
+    parsed = [(parse_week_label(v), v) for v in raw_vals if v]
+    parsed = [(k, v) for k, v in parsed if k is not None]
+    if not parsed:
+        return ""
+    parsed.sort(key=lambda x: x[0])
+    return f"데이터 기준 기간 · {parsed[0][1]} ~ {parsed[-1][1]}"
+
+
+def render_reference():
+    st.markdown("<div class='section-title'>참고사항</div>", unsafe_allow_html=True)
+    st.caption("지표 산식과 등급 해석이 궁금한 경우에만 보는 참고 페이지입니다.")
+    st.markdown(
+        """
+        <div class='card'>
+            <div class='rep-title'>1. 기본 구조</div>
+            <div class='actor-sub'>
+            본 대시보드는 RAW 시트를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
+            합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.
+            </div>
+            <div class='spacer-md'></div>
+            <div class='rep-title'>2. 항목별 계산 개요</div>
+            <div class='actor-sub'>
+            <b>생산력</b>은 배우 화제성 규모와 대표작 성과를 중심으로 계산합니다.<br>
+            <b>안정성</b>은 작품수 보정, 작품평균, 꾸준함지수, 히트 분산 보정을 함께 반영합니다.<br>
+            <b>기여도</b>는 작품 내 존재감과 기여도를 계산하되, 작은 작품에서 과대평가되지 않도록 작품 체급 보정을 적용합니다.
+            </div>
+            <div class='spacer-md'></div>
+            <div class='rep-title'>3. 합산티어 컷</div>
+            <div class='actor-sub'>
+            Top-S 99% 이상<br>
+            Top-A 97% 이상<br>
+            Top-B 93% 이상<br>
+            Top-C 85% 이상<br>
+            Middle-A 70% 이상<br>
+            Middle-B 50% 이상<br>
+            Middle-C 30% 이상<br>
+            Base-A 15% 이상<br>
+            Base-B 5% 이상<br>
+            Base-C 5% 미만
+            </div>
+            <div class='spacer-md'></div>
+            <div class='rep-title'>4. 항목별 등급 해석</div>
+            <div class='actor-sub'>
+            생산력등급, 안정성등급, 기여도등급은 각 항목 백분율을 기준으로 동일한 컷 구조를 적용합니다.
+            상세보기 페이지에서는 전체 기준 점수와 함께 <b>Top / Middle / Base 내부 상대점수</b>도 함께 제공합니다.
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
 def table_styler(df: pd.DataFrame):
     show = df[VISIBLE_COLUMNS].copy()
     show["합산점수"] = pd.to_numeric(show["합산점수"], errors="coerce").map(format_score)
@@ -497,9 +580,10 @@ def table_styler(df: pd.DataFrame):
     show["#"] = show["#"].astype(int)
 
     def bg_color(val):
-        color = GRADE_BG.get(str(val), "#ffffff")
-        text = "#ffffff" if str(val).startswith("Top") or str(val).startswith("Base-C") else "#111827"
-        return f"background-color: {color}; color: {text}; font-weight: 800; border-radius: 8px;"
+        grade = str(val)
+        color = GRADE_BG.get(grade, "#ffffff")
+        text_color = grade_text_color(grade)
+        return f"background-color: {color}; color: {text_color}; font-weight: 800; border-radius: 8px;"
 
     styler = (
         show.style
@@ -716,18 +800,23 @@ def main():
 
     raw_df = load_raw_from_gsheet()
     result_df = build_result_table(raw_df)
+    period_caption = get_data_period_caption(raw_df)
+    if period_caption:
+        st.caption(period_caption)
 
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-        page = st.radio("", ["OVERVIEW", "상세보기", "배우 모아보기"], index=0, label_visibility="collapsed")
+        page = st.radio("", ["OVERVIEW", "상세보기", "배우 모아보기", "참고사항"], index=0, label_visibility="collapsed")
         st.markdown("<div class='sidebar-footnote'>문의 : 미디어마케팅팀 데이터인사이트파트</div>", unsafe_allow_html=True)
 
     if page == "OVERVIEW":
         render_overview(raw_df, result_df)
     elif page == "상세보기":
         render_detail(raw_df, result_df)
-    else:
+    elif page == "배우 모아보기":
         render_compare(raw_df, result_df)
+    else:
+        render_reference()
 
 
 if __name__ == "__main__":
