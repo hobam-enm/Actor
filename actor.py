@@ -807,6 +807,12 @@ def table_styler(df: pd.DataFrame):
 
 def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>OVERVIEW</div>", unsafe_allow_html=True)
+
+    # 정의된 함수를 호출하여 데이터 기준 기간 텍스트를 가져오고 화면에 캡션으로 출력합니다.
+    period_caption = get_data_period_caption(raw_df)
+    if period_caption:
+        st.caption(period_caption)
+
     total_actors = result_df["배우"].nunique()
     total_programs = raw_df["프로그램명"].nunique()
     top_ratio = (result_df["대분류티어"] == "Top").mean() * 100
