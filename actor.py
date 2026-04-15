@@ -43,14 +43,14 @@ GRADE_ORDER = [
 TIER_BASE_ORDER = ["Top", "Middle", "Base"]
 
 TIER_COLORS = {
-    "Top": "#1f4ed8",
-    "Middle": "#0f9f8f",
+    "Top": "#2456ff",
+    "Middle": "#0d9a85",
     "Base": "#ef6a5b",
 }
 GRADE_BG = {
-    "Top-S": "#5b3df5", "Top-A": "#1f4ed8", "Top-B": "#3b6df0", "Top-C": "#7ea2ff",
-    "Middle-A": "#0f9f8f", "Middle-B": "#33b8a6", "Middle-C": "#8adccd",
-    "Base-A": "#f08a24", "Base-B": "#f56b5f", "Base-C": "#ff8f87",
+    "Top-S": "#7a3cff", "Top-A": "#1747d1", "Top-B": "#3f74ff", "Top-C": "#9ab7ff",
+    "Middle-A": "#0b8f7c", "Middle-B": "#24baa1", "Middle-C": "#b7efe3",
+    "Base-A": "#ef7d1a", "Base-B": "#f45b49", "Base-C": "#ffd0ca",
 }
 
 VISIBLE_COLUMNS = [
@@ -125,39 +125,59 @@ def inject_css():
         }
         div[data-testid="stSidebarUserContent"] .stRadio label:last-child {border-bottom:1px solid #d8dde7;}
         div[data-testid="stSidebarUserContent"] .stRadio label > div:first-child {display:none;}
+        section[data-testid="stSidebar"] {
+            min-width: 270px !important;
+            max-width: 270px !important;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio {
+            width: 100%;
+        }
         div[data-testid="stSidebarUserContent"] .stRadio > div {
             gap: 0 !important;
+            width: 100%;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] {
-            display:flex !important;
-            width:100% !important;
-            margin:0 !important;
-            padding:0 !important;
-            border-top:1px solid #d9dee8;
-            min-height:unset !important;
+            display: flex !important;
+            align-items: stretch !important;
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border-top: 1px solid #d9dee8;
+            min-height: unset !important;
+            cursor: pointer !important;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"]:last-of-type {
-            border-bottom:1px solid #d9dee8;
+            border-bottom: 1px solid #d9dee8;
         }
-        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] > div {
-            display:none !important;
+        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] > div:first-child {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            flex: 1 1 auto !important;
+            margin: 0 !important;
+        }
+        div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] > div:first-child > div {
+            display: none !important;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"] p {
-            display:block !important;
-            width:100% !important;
-            box-sizing:border-box;
-            font-size: 1.45rem;
-            font-weight:800;
-            color:#3f4652;
-            text-align:center;
-            margin:0;
-            padding:1.05rem 0;
-            border-radius:0;
+            display: block !important;
+            width: 100% !important;
+            box-sizing: border-box !important;
+            font-size: 2rem !important;
+            font-weight: 900 !important;
+            color: #2f3848 !important;
+            text-align: center !important;
+            line-height: 1.15 !important;
+            margin: 0 !important;
+            padding: 1.2rem 0.6rem !important;
+            border-radius: 0 !important;
+            letter-spacing: -0.03em !important;
         }
         div[data-testid="stSidebarUserContent"] .stRadio label[data-baseweb="radio"]:has(input:checked) p {
-            background:#1f64f0;
-            color:#ffffff;
-            border-radius:0;
+            background: #1f64f0 !important;
+            color: #ffffff !important;
+            border-radius: 0 !important;
         }
         .sidebar-footnote {color:#8b919c; font-size:0.9rem; margin-top:2rem;}
 
