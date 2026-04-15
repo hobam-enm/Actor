@@ -227,15 +227,19 @@ def load_raw_from_gsheet() -> pd.DataFrame:
         st.error(f"RAW 시트에 필요한 컬럼이 없습니다: {missing}")
         st.stop()
 
-    period_source_col = header[0] if header else None
+    period_col_idx = 0 if len(df.columns) > 0 else None
+
     keep_cols = [c for c in [
         "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
     ] if c in df.columns]
-    if period_source_col and period_source_col in df.columns:
-        keep_cols = [period_source_col] + keep_cols
+
     df = df[keep_cols].copy()
-    if period_source_col and period_source_col in df.columns:
-        df["__period_raw"] = df[period_source_col].astype(str).str.strip()
+
+    if period_col_idx is not None and len(values[0]) > 0:
+        period_values = [row[0] if len(row) > 0 else "" for row in values[1:]]
+        if len(period_values) < len(df):
+            period_values += [""] * (len(df) - len(period_values))
+        df["__period_raw"] = pd.Series(period_values[:len(df)], index=df.index).astype(str).str.strip()
 
     for col in ["인물명", "프로그램명"]:
         df[col] = df[col].astype(str).str.strip()
