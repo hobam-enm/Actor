@@ -65,7 +65,15 @@ def inject_css():
         """
         <style>
         .stApp {background: #f5f7fb;}
-        [data-testid="stHeader"] {display:none;}
+        
+[data-testid="stHeader"] {
+            background: rgba(255,255,255,0) !important;
+            height: 44px;
+}
+[data-testid="stHeader"] > div {
+            height: 44px;
+}
+
         [data-testid="stToolbar"] {display:none;}
         [data-testid="stDecoration"] {display:none;}
         [data-testid="stSidebarNav"] {display:none;}
@@ -113,6 +121,45 @@ def inject_css():
         .work-v {font-size:1.15rem; font-weight:900; color:#111827; margin-bottom:10px;}
         .subtle {color:#6b7280; font-size:0.9rem;}
         .select-hint {font-size:0.88rem; color:#6b7280; margin-top:-0.2rem; margin-bottom:0.9rem;}
+        .summary-card {
+            background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+            border: 1px solid #e7ebf3;
+            border-radius: 22px;
+            padding: 18px 18px;
+            box-shadow: 0 8px 22px rgba(31,41,55,0.04);
+            min-height: 126px;
+            height: 100%;
+        }
+        .summary-card.accent {
+            border: 2px solid #2158d9;
+            box-shadow: 0 10px 28px rgba(33,88,217,0.08);
+        }
+        .summary-title {
+            font-size: 0.96rem;
+            font-weight: 800;
+            color: #667085;
+            margin-bottom: 10px;
+        }
+        .summary-big {
+            font-size: 2.1rem;
+            line-height: 1.05;
+            font-weight: 900;
+            color: #10213a;
+            letter-spacing: -0.04em;
+        }
+        .summary-mid {
+            font-size: 0.98rem;
+            font-weight: 800;
+            color: #10213a;
+            margin-top: 4px;
+        }
+        .summary-sub {
+            font-size: 0.88rem;
+            color: #7b8495;
+            line-height: 1.65;
+            margin-top: 10px;
+        }
+
         .stTextInput > div > div, .stSelectbox > div > div, .stRadio > div, .stMultiSelect > div > div {
             border-radius: 14px !important;
         }
@@ -227,19 +274,12 @@ def load_raw_from_gsheet() -> pd.DataFrame:
         st.error(f"RAW 시트에 필요한 컬럼이 없습니다: {missing}")
         st.stop()
 
-    period_col_idx = 0 if len(df.columns) > 0 else None
-
+    period_values = [str(row[0]).strip() if len(row) > 0 else "" for row in rows]
     keep_cols = [c for c in [
         "인물명", "프로그램명", "드라마화제성", "배우화제성", "랭크인주차", "랭크인배우수", "작품내랭킹", "점유율"
     ] if c in df.columns]
-
     df = df[keep_cols].copy()
-
-    if period_col_idx is not None and len(values[0]) > 0:
-        period_values = [row[0] if len(row) > 0 else "" for row in values[1:]]
-        if len(period_values) < len(df):
-            period_values += [""] * (len(df) - len(period_values))
-        df["__period_raw"] = pd.Series(period_values[:len(df)], index=df.index).astype(str).str.strip()
+    df["__period_raw"] = pd.Series(period_values[:len(df)], index=df.index).astype(str).str.strip()
 
     for col in ["인물명", "프로그램명"]:
         df[col] = df[col].astype(str).str.strip()
@@ -437,23 +477,49 @@ def work_card(program: str, drama_score: float, actor_score: float):
     )
 
 
+
+def summary_grade_card(title: str, grade: str, accent: bool = False) -> str:
+    bg = GRADE_BG.get(str(grade), "#64748b")
+    fg = grade_text_color(str(grade))
+    card_class = "summary-card accent" if accent else "summary-card"
+    return f"""
+    <div class='{card_class}'>
+        <div class='summary-title'>{title}</div>
+        <div class='summary-big' style='color:{bg};'>{grade}</div>
+    </div>
+    """
+
+
 def actor_summary_card(row: pd.Series):
-    tier_color = GRADE_BG.get(row["합산티어"], "#64748b")
-    st.markdown(
-        f"""
-        <div class='card'>
-            <div style='display:flex; gap:8px; align-items:center; flex-wrap:wrap;'>
-              {chip_html(f"합산 {row['합산티어']}", row['합산티어'])}
-              {chip_html(f"생산 {row['생산력등급']}", row['생산력등급'])}
-              {chip_html(f"안정 {row['안정성등급']}", row['안정성등급'])}
-              {chip_html(f"기여 {row['기여도등급']}", row['기여도등급'])}
+    c1, c2, c3, c4, c5 = st.columns([1.45, 1.1, 0.95, 0.95, 0.95])
+
+    with c1:
+        st.markdown(
+            f"""
+            <div class='summary-card'>
+                <div class='summary-title'>배우 개요</div>
+                <div class='summary-big' style='font-size:1.9rem;'>{row['배우']}</div>
+                <div class='summary-sub'>
+                    합산점수 <b>{format_score(row['합산점수'])}</b><br>
+                    배우화제성 <b>{format_int(row['배우화제성'])}</b><br>
+                    출연작품수 <b>{format_int(row['출연작품수'])}</b>
+                </div>
             </div>
-            <div class='actor-name' style='font-size:1.45rem; margin-top:14px;'>{row['배우']}</div>
-            <div class='actor-sub' style='font-size:0.95rem;'>합산점수 <b>{format_score(row['합산점수'])}</b> · 배우화제성 <b>{format_int(row['배우화제성'])}</b> · 출연작품수 <b>{format_int(row['출연작품수'])}</b></div>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with c2:
+        st.markdown(summary_grade_card("종합등급", row["합산티어"], accent=True), unsafe_allow_html=True)
+
+    with c3:
+        st.markdown(summary_grade_card("생산력 등급", row["생산력등급"]), unsafe_allow_html=True)
+
+    with c4:
+        st.markdown(summary_grade_card("안정성 등급", row["안정성등급"]), unsafe_allow_html=True)
+
+    with c5:
+        st.markdown(summary_grade_card("기여도 등급", row["기여도등급"]), unsafe_allow_html=True)
 
 
 def build_actor_program_summary(raw_df: pd.DataFrame, actor_name: str) -> pd.DataFrame:
@@ -538,7 +604,7 @@ def render_reference():
         <div class='card'>
             <div class='rep-title'>1. 기본 구조</div>
             <div class='actor-sub'>
-            본 대시보드는 펀덱스 배우 화제성 점수를 바탕으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
+            본 대시보드는 FUNDEX 인물 화제성점수를 기반으로 배우별 <b>생산력</b>, <b>안정성</b>, <b>기여도</b>를 계산하고,
             합산점수는 <b>생산력 40% · 안정성 30% · 기여도 30%</b> 가중으로 산출합니다.
             </div>
             <div class='spacer-md'></div>
