@@ -224,6 +224,13 @@ def inject_css():
             box-shadow: 0 10px 28px rgba(31,41,55,0.05);
             margin-top: 14px;
         }
+        div[data-testid="stVerticalBlockBorderWrapper"] {
+            background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+            border: 1px solid #e7ebf3;
+            border-radius: 24px;
+            box-shadow: 0 10px 28px rgba(31,41,55,0.05);
+            padding: 8px 10px;
+        }
         .overview-section-title {
             font-size: 1.18rem;
             font-weight: 900;
@@ -1064,41 +1071,38 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
     heatmap_fig = build_overview_demo_figures(result_df)
-    st.markdown("<div class='overview-section-box'>", unsafe_allow_html=True)
-    st.markdown("<div class='overview-section-title'>티어별 성·연령 분포</div>", unsafe_allow_html=True)
-    st.markdown("<div class='overview-section-sub'>각 성·연령 집단 내부에서 합산티어가 어떻게 분포하는지 비중으로 보여줍니다.</div>", unsafe_allow_html=True)
-    st.plotly_chart(heatmap_fig, use_container_width=True)
-    st.markdown("</div>", unsafe_allow_html=True)
+    with st.container(border=True):
+        st.markdown("<div class='overview-section-title'>티어별 성·연령 분포</div>", unsafe_allow_html=True)
+        st.markdown("<div class='overview-section-sub'>각 성·연령 집단 내부에서 합산티어가 어떻게 분포하는지 비중으로 보여줍니다.</div>", unsafe_allow_html=True)
+        st.plotly_chart(heatmap_fig, use_container_width=True)
 
-    st.markdown("<div class='overview-section-box'>", unsafe_allow_html=True)
-    st.markdown("<div class='overview-section-title'>성별 Top 10</div>", unsafe_allow_html=True)
-    gender_left, gender_right = st.columns(2)
-    with gender_left:
-        render_highlight_rank_section(
-            "남배우 Top 10",
-            result_df[result_df["성별"] == "남"],
-            subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
-        )
-    with gender_right:
-        render_highlight_rank_section(
-            "여배우 Top 10",
-            result_df[result_df["성별"] == "여"],
-            subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
-        )
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("<div class='overview-section-box'>", unsafe_allow_html=True)
-    st.markdown("<div class='overview-section-title'>연령대별 Top 10</div>", unsafe_allow_html=True)
-    age_cols = st.columns(2)
-    for i, age_group in enumerate(AGE_GROUP_ORDER):
-        with age_cols[i % 2]:
+    with st.container(border=True):
+        st.markdown("<div class='overview-section-title'>성별 Top 10</div>", unsafe_allow_html=True)
+        gender_left, gender_right = st.columns(2)
+        with gender_left:
             render_highlight_rank_section(
-                f"{age_group} Top 10",
-                result_df[result_df["연령대"] == age_group],
-                subtitle_builder=lambda r: f"{r.get('성별', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
-                compact=True,
+                "남배우 Top 10",
+                result_df[result_df["성별"] == "남"],
+                subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
             )
-    st.markdown("</div>", unsafe_allow_html=True)
+        with gender_right:
+            render_highlight_rank_section(
+                "여배우 Top 10",
+                result_df[result_df["성별"] == "여"],
+                subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+            )
+
+    with st.container(border=True):
+        st.markdown("<div class='overview-section-title'>연령대별 Top 10</div>", unsafe_allow_html=True)
+        age_cols = st.columns(2)
+        for i, age_group in enumerate(AGE_GROUP_ORDER):
+            with age_cols[i % 2]:
+                render_highlight_rank_section(
+                    f"{age_group} Top 10",
+                    result_df[result_df["연령대"] == age_group],
+                    subtitle_builder=lambda r: f"{r.get('성별', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+                    compact=True,
+                )
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>전체 배우 리스트</div>", unsafe_allow_html=True)
