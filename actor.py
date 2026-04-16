@@ -1061,8 +1061,12 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         metric_card("현재 1위 배우", top1["배우"], f"합산점수 {format_score(top1['합산점수'])}")
 
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    demo_fig = build_overview_demo_figures(result_df)
-    st.plotly_chart(demo_fig, use_container_width=True)
+    gender_fig, age_fig = build_overview_demo_figures(result_df)
+    g1, g2 = st.columns(2)
+    with g1:
+        st.plotly_chart(gender_fig, use_container_width=True)
+    with g2:
+        st.plotly_chart(age_fig, use_container_width=True)
 
     render_highlight_rank_section(
         "남배우 Top 10",
