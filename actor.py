@@ -315,6 +315,26 @@ def load_actor_meta_from_gsheet() -> pd.DataFrame:
     return meta[["배우", "성별", "출생연도", "연령", "연령대"]]
 
 
+
+
+@st.cache_data(ttl=600)
+def merge_actor_meta(result_df: pd.DataFrame, actor_meta_df: pd.DataFrame) -> pd.DataFrame:
+    merged = result_df.copy()
+    if actor_meta_df is None or actor_meta_df.empty:
+        merged["성별"] = "미상"
+        merged["출생연도"] = np.nan
+        merged["연령"] = np.nan
+        merged["연령대"] = "미상"
+        return merged
+
+    meta = actor_meta_df.copy()
+    meta["배우"] = meta["배우"].astype(str).str.strip()
+    merged["배우"] = merged["배우"].astype(str).str.strip()
+    merged = merged.merge(meta, on="배우", how="left")
+    merged["성별"] = merged["성별"].fillna("미상")
+    merged["연령대"] = merged["연령대"].fillna("미상")
+    return merged
+
 @st.cache_data(ttl=600)
 def load_raw_from_gsheet() -> pd.DataFrame:
     data_cfg = get_secret_section("data")
@@ -1143,7 +1163,9 @@ def main():
     st.markdown("<div class='page-title'>배우 다차원 화제성 지표 - 드라마</div>", unsafe_allow_html=True)
 
     raw_df = load_raw_from_gsheet()
+    actor_meta_df = load_actor_meta_from_gsheet()
     result_df = build_result_table(raw_df)
+    result_df = merge_actor_meta(result_df, actor_meta_df)
 
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
