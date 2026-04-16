@@ -1,5 +1,6 @@
 import math
 import re
+import textwrap
 from typing import Dict, List, Tuple
 
 import gspread
@@ -569,24 +570,20 @@ def rank_list_card(rows: pd.DataFrame, start_rank: int = 4):
     lines = []
     for i, (_, r) in enumerate(rows.iterrows(), start=start_rank):
         lines.append(
-            f"""
-            <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #edf1f7;'>
-                <div style='min-width:0;'>
-                    <div style='font-size:0.92rem; font-weight:900; color:#111827;'>{i}위 {r['배우']}</div>
-                    <div style='font-size:0.8rem; color:#6b7280; margin-top:3px;'>{r['합산티어']}</div>
-                </div>
-                <div style='font-size:0.92rem; font-weight:900; color:#111827; white-space:nowrap;'>{format_score(r['합산점수'])}</div>
-            </div>
-            """
+            f"<div style='display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #edf1f7;'>"
+            f"<div style='min-width:0;'>"
+            f"<div style='font-size:0.92rem; font-weight:900; color:#111827;'>{i}위 {r['배우']}</div>"
+            f"<div style='font-size:0.8rem; color:#6b7280; margin-top:3px;'>{r['합산티어']}</div>"
+            f"</div>"
+            f"<div style='font-size:0.92rem; font-weight:900; color:#111827; white-space:nowrap;'>{format_score(r['합산점수'])}</div>"
+            f"</div>"
         )
-    st.markdown(
-        f"""
-        <div class='card' style='padding:10px 18px 8px 18px;'>
-            {''.join(lines)}
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    html = textwrap.dedent(f"""
+    <div class='card' style='padding:10px 18px 8px 18px;'>
+        {''.join(lines)}
+    </div>
+    """).strip()
+    st.markdown(html, unsafe_allow_html=True)
 
 
 def build_overview_demo_figures(result_df: pd.DataFrame):
@@ -1064,12 +1061,8 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         metric_card("현재 1위 배우", top1["배우"], f"합산점수 {format_score(top1['합산점수'])}")
 
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    g1, g2 = st.columns(2)
-    gender_fig, age_fig = build_overview_demo_figures(result_df)
-    with g1:
-        st.plotly_chart(gender_fig, use_container_width=True)
-    with g2:
-        st.plotly_chart(age_fig, use_container_width=True)
+    demo_fig = build_overview_demo_figures(result_df)
+    st.plotly_chart(demo_fig, use_container_width=True)
 
     render_highlight_rank_section(
         "남배우 Top 10",
