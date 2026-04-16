@@ -247,7 +247,7 @@ def normalize_gender(value: str) -> str:
     if s in ["남", "남자", "남성", "M", "Male", "male"]:
         return "남"
     if s in ["녀", "여", "여자", "여성", "F", "Female", "female"]:
-        return "녀"
+        return "여"
     return "미상"
 
 
@@ -944,20 +944,11 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
                 top10_card(i + 1, r["배우"], r["합산티어"], r["합산점수"])
 
     render_rank_section("남배우 Top 10", result_df[result_df["성별"] == "남"])
-    render_rank_section("여배우 Top 10", result_df[result_df["성별"] == "녀"])
+    render_rank_section("여배우 Top 10", result_df[result_df["성별"] == "여"])
     for age_group in AGE_GROUP_ORDER:
         render_rank_section(f"{age_group} Top 10", result_df[result_df["연령대"] == age_group])
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>등급별 대표배우</div>", unsafe_allow_html=True)
-    for grade in GRADE_ORDER:
-        st.markdown(f"<div style='margin:0.4rem 0 0.65rem 0.2rem;'>{chip_html(grade, grade)}</div>", unsafe_allow_html=True)
-        c1, c2 = st.columns(2)
-        grade_df = result_df[result_df["합산티어"] == grade].copy()
-        with c1:
-            representative_card("남배우 대표 5명", grade, grade_df[grade_df["성별"] == "남"].head(5))
-        with c2:
-            representative_card("여배우 대표 5명", grade, grade_df[grade_df["성별"] == "녀"].head(5))
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>전체 배우 리스트</div>", unsafe_allow_html=True)
@@ -971,7 +962,7 @@ def similar_tier_actors(result_df: pd.DataFrame, row: pd.Series, top_n: int = 4)
         (result_df["기여도등급"] == row["기여도등급"])
     ].copy()
     pool = pool[pool["배우"] != row["배우"]].copy()
-    if row.get("성별", "미상") in ["남", "녀"]:
+    if row.get("성별", "미상") in ["남", "여"]:
         pool = pool[pool["성별"] == row["성별"]].copy()
     if pool.empty:
         return pool
@@ -1091,7 +1082,7 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
                 options=sorted(raw_df["프로그램명"].dropna().astype(str).unique().tolist()),
                 placeholder="전체",
             )
-            selected_gender = st.multiselect("성별", options=["남", "녀", "미상"], placeholder="전체")
+            selected_gender = st.multiselect("성별", options=["남", "여", "미상"], placeholder="전체")
         with c2:
             selected_total_grade = st.multiselect("합산등급", options=GRADE_ORDER, placeholder="전체")
             selected_age_groups = st.multiselect(
