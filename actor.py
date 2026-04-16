@@ -55,9 +55,13 @@ GRADE_BG = {
 }
 
 VISIBLE_COLUMNS = [
-    "#", "배우", "합산티어", "생산력등급", "안정성등급", "기여도등급",
+    "#", "배우", "성별", "연령대", "합산티어", "생산력등급", "안정성등급", "기여도등급",
     "합산점수", "생산백분율", "안정백분율", "기여백분율", "배우화제성", "출연작품수"
 ]
+
+ACTOR_META_REQUIRED_COLUMNS = ["배우명", "남녀", "출생연도"]
+AGE_GROUP_ORDER = ["20대", "30대", "40대", "50대"]
+CURRENT_YEAR = 2026
 
 
 def inject_css():
@@ -236,6 +240,79 @@ def get_gspread_client():
     ]
     creds = Credentials.from_service_account_info(sa, scopes=scopes)
     return gspread.authorize(creds)
+
+
+def normalize_gender(value: str) -> str:
+    s = str(value).strip()
+    if s in ["남", "남자", "남성", "M", "Male", "male"]:
+        return "남"
+    if s in ["녀", "여", "여자", "여성", "F", "Female", "female"]:
+        return "녀"
+    return "미상"
+
+
+def derive_age_group(birth_year) -> str:
+    if pd.isna(birth_year):
+        return "미상"
+    try:
+        age = CURRENT_YEAR - int(birth_year) + 1
+    except Exception:
+        return "미상"
+    if age < 20:
+        return "20대 미만"
+    if age < 30:
+        return "20대"
+    if age < 40:
+        return "30대"
+    if age < 50:
+        return "40대"
+    return "50대"
+
+
+def sort_age_groups(values: List[str]) -> List[str]:
+    order = {k: i for i, k in enumerate(AGE_GROUP_ORDER + ["20대 미만", "미상"])}
+    return sorted(values, key=lambda x: (order.get(x, 999), str(x)))
+
+
+@st.cache_data(ttl=600)
+def load_actor_meta_from_gsheet() -> pd.DataFrame:
+    data_cfg = get_secret_section("data")
+    spreadsheet_id = data_cfg.get("spreadsheet_id", "").strip()
+    actor_sheet = data_cfg.get("actor_list_sheet", "배우리스트").strip() or "배우리스트"
+    if not spreadsheet_id:
+        return pd.DataFrame(columns=["배우", "성별", "출생연도", "연령", "연령대"])
+
+    gc = get_gspread_client()
+    sh = gc.open_by_key(spreadsheet_id)
+    ws = sh.worksheet(actor_sheet)
+    values = ws.get_all_values()
+    if not values or len(values) < 2:
+        return pd.DataFrame(columns=["배우", "성별", "출생연도", "연령", "연령대"])
+
+    header = [(c or "").strip() or f"unnamed_{i+1}" for i, c in enumerate(values[0])]
+    rows = []
+    max_len = len(header)
+    for row in values[1:]:
+        row = list(row)
+        if len(row) < max_len:
+            row += [""] * (max_len - len(row))
+        rows.append(row[:max_len])
+
+    df = pd.DataFrame(rows, columns=header)
+    missing = [c for c in ACTOR_META_REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        st.warning(f"배우리스트 탭에 필요한 컬럼이 없습니다: {missing}")
+        return pd.DataFrame(columns=["배우", "성별", "출생연도", "연령", "연령대"])
+
+    meta = df[ACTOR_META_REQUIRED_COLUMNS].copy()
+    meta["배우"] = meta["배우명"].astype(str).str.strip()
+    meta["성별"] = meta["남녀"].apply(normalize_gender)
+    meta["출생연도"] = pd.to_numeric(meta["출생연도"], errors="coerce")
+    meta["연령"] = meta["출생연도"].apply(lambda x: CURRENT_YEAR - int(x) + 1 if pd.notna(x) else np.nan)
+    meta["연령대"] = meta["출생연도"].apply(derive_age_group)
+    meta = meta[meta["배우"].notna() & (meta["배우"] != "")].copy()
+    meta = meta.drop_duplicates(subset=["배우"], keep="first")
+    return meta[["배우", "성별", "출생연도", "연령", "연령대"]]
 
 
 @st.cache_data(ttl=600)
@@ -450,15 +527,16 @@ def top10_card(rank: int, name: str, tier: str, score: float):
     )
 
 
-def representative_card(grade: str, rows: pd.DataFrame):
-    bg = GRADE_BG.get(grade, "#64748b")
+def representative_card(title: str, badge: str, rows: pd.DataFrame):
     lines = "".join([
         f"<div class='rep-line'><b>{r['배우']}</b> ({format_score(r['합산점수'])})</div>" for _, r in rows.iterrows()
     ])
     st.markdown(
         f"""
         <div class='rep-card'>
-            <div class='rep-title'>{chip_html(grade, grade)}</div>
+            <div class='rep-title'>{title}</div>
+            {chip_html(badge, badge)}
+            <div style='height:10px;'></div>
             {lines if lines else "<div class='actor-sub'>해당 배우 없음</div>"}
         </div>
         """,
@@ -506,7 +584,8 @@ def actor_summary_card(row: pd.Series):
                 <div class='summary-sub'>
                     합산점수 <b>{format_score(row['합산점수'])}</b><br>
                     배우화제성 <b>{format_int(row['배우화제성'])}</b><br>
-                    출연작품수 <b>{format_int(row['출연작품수'])}</b>
+                    출연작품수 <b>{format_int(row['출연작품수'])}</b><br>
+                    성별 <b>{row.get('성별', '미상')}</b> · 연령대 <b>{row.get('연령대', '미상')}</b>
                 </div>
             </div>
             """,
@@ -813,7 +892,6 @@ def table_styler(df: pd.DataFrame):
 def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>OVERVIEW</div>", unsafe_allow_html=True)
 
-    # 정의된 함수를 호출하여 데이터 기준 기간 텍스트를 가져오고 화면에 캡션으로 출력합니다.
     period_caption = get_data_period_caption(raw_df)
     if period_caption:
         st.caption(period_caption)
@@ -833,21 +911,33 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     with c4:
         metric_card("현재 1위 배우", top1["배우"], f"합산점수 {format_score(top1['합산점수'])}")
 
-    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>Top 10</div>", unsafe_allow_html=True)
-    top10 = result_df.head(10)
-    cols = st.columns(5)
-    for i, (_, row) in enumerate(top10.iterrows()):
-        with cols[i % 5]:
-            top10_card(int(row["#"]), row["배우"], row["합산티어"], row["합산점수"])
+    def render_rank_section(title: str, sub_df: pd.DataFrame, limit: int = 10):
+        st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+        rows = sub_df.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).head(limit).reset_index(drop=True)
+        if rows.empty:
+            st.info("표시할 배우가 없습니다.")
+            return
+        cols = st.columns(5)
+        for i, (_, r) in enumerate(rows.iterrows()):
+            with cols[i % 5]:
+                top10_card(i + 1, r["배우"], r["합산티어"], r["합산점수"])
+
+    render_rank_section("남배우 Top 10", result_df[result_df["성별"] == "남"])
+    render_rank_section("여배우 Top 10", result_df[result_df["성별"] == "녀"])
+    for age_group in AGE_GROUP_ORDER:
+        render_rank_section(f"{age_group} Top 10", result_df[result_df["연령대"] == age_group])
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>등급별 대표배우</div>", unsafe_allow_html=True)
-    rep_cols = st.columns(5)
-    for i, grade in enumerate(GRADE_ORDER):
-        sub = result_df[result_df["합산티어"] == grade].head(5)
-        with rep_cols[i % 5]:
-            representative_card(grade, sub)
+    for grade in GRADE_ORDER:
+        st.markdown(f"<div style='margin:0.4rem 0 0.65rem 0.2rem;'>{chip_html(grade, grade)}</div>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        grade_df = result_df[result_df["합산티어"] == grade].copy()
+        with c1:
+            representative_card("남배우 대표 5명", grade, grade_df[grade_df["성별"] == "남"].head(5))
+        with c2:
+            representative_card("여배우 대표 5명", grade, grade_df[grade_df["성별"] == "녀"].head(5))
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>전체 배우 리스트</div>", unsafe_allow_html=True)
@@ -861,6 +951,8 @@ def similar_tier_actors(result_df: pd.DataFrame, row: pd.Series, top_n: int = 4)
         (result_df["기여도등급"] == row["기여도등급"])
     ].copy()
     pool = pool[pool["배우"] != row["배우"]].copy()
+    if row.get("성별", "미상") in ["남", "녀"]:
+        pool = pool[pool["성별"] == row["성별"]].copy()
     if pool.empty:
         return pool
     match_count = (
@@ -926,61 +1018,14 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
 
 def compare_table_rows(result_df: pd.DataFrame, names: List[str]) -> pd.DataFrame:
-    cols = ["배우", "합산티어", "생산력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]
+    cols = ["배우", "성별", "연령대", "합산티어", "생산력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]
     return result_df[result_df["배우"].isin(names)][cols].sort_values("합산점수", ascending=False)
 
 
-def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
-    st.markdown("<div class='section-title'>배우 모아보기</div>", unsafe_allow_html=True)
-    mode = st.radio(
-        "보기 옵션",
-        ["작품 검색해서 모아보기", "등급 안에서 비교하기", "배우 직접 선택 1대1 비교"],
-        horizontal=True,
-    )
-
-    selected_names: List[str] = []
-    if mode == "작품 검색해서 모아보기":
-        program_list = sorted(raw_df["프로그램명"].dropna().astype(str).unique().tolist())
-        selected_program = st.selectbox("작품 선택", program_list, index=0, placeholder="작품명을 검색해 선택")
-        matched = raw_df[raw_df["프로그램명"] == selected_program]
-        selected_names = matched["인물명"].dropna().astype(str).unique().tolist()
-        st.caption(f"선택 작품: {selected_program} · 배우 {len(selected_names)}명")
-    elif mode == "등급 안에서 비교하기":
-        c1, c2 = st.columns(2)
-        tier_type_options = {
-            "합산티어": "합산티어",
-            "생산력등급": "생산력등급",
-            "안정성등급": "안정성등급",
-            "기여도등급": "기여도등급",
-        }
-        with c1:
-            tier_field_label = st.selectbox("비교 기준", list(tier_type_options.keys()), index=0)
-        with c2:
-            tier_field = tier_type_options[tier_field_label]
-            available = [g for g in GRADE_ORDER if g in result_df[tier_field].dropna().unique().tolist()]
-            selected_grade = st.selectbox("등급 선택", available, index=0)
-        filtered = result_df[result_df[tier_field] == selected_grade].copy().sort_values(["합산점수", "배우화제성"], ascending=[False, False])
-        selected_names = filtered["배우"].tolist()[:20]
-        st.caption(f"{tier_field_label}: {selected_grade} · {len(filtered):,}명 중 상위 20명 표시")
-    else:
-        names = result_df["배우"].tolist()
-        left, right = st.columns(2)
-        with left:
-            actor1 = st.selectbox("배우 1", names, index=0, placeholder="배우명 검색")
-        with right:
-            default_idx = 1 if len(names) > 1 else 0
-            actor2 = st.selectbox("배우 2", names, index=default_idx, placeholder="배우명 검색")
-        selected_names = [a for a in [actor1, actor2] if a]
-
-    if not selected_names:
-        st.info("조건을 선택하면 비교 대상이 표시됩니다.")
+def render_actor_radar(result_df: pd.DataFrame, chart_names: List[str], title: str, dynamic_range: bool = False):
+    if not chart_names:
+        st.info("조건에 맞는 배우가 없습니다.")
         return
-
-    comp_df = compare_table_rows(result_df, selected_names)
-    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    st.dataframe(comp_df.style.format({"합산점수": "{:.2f}", "배우화제성": "{:,.0f}", "출연작품수": "{:,.0f}"}), use_container_width=True, hide_index=True)
-
-    chart_names = comp_df["배우"].tolist()[:8]
     fig = go.Figure()
     all_values = []
     for name in chart_names:
@@ -997,7 +1042,7 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
                 name=name,
             )
         )
-    if mode == "배우 직접 선택 1대1 비교" and len(chart_names) == 2 and all_values:
+    if dynamic_range and all_values:
         rmin, rmax = min(all_values), max(all_values)
         pad = max(6, (rmax - rmin) * 0.45)
         low = max(0, math.floor((rmin - pad) / 5) * 5)
@@ -1005,13 +1050,93 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     else:
         low, high = 0, 100
     fig.update_layout(
-        title="선택 배우 비교 · 항목별 점수",
+        title=title,
         height=430,
         margin=dict(l=20, r=20, t=50, b=20),
         polar=dict(radialaxis=dict(visible=True, range=[low, high])),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     st.plotly_chart(fig, use_container_width=True)
+
+
+def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
+    st.markdown("<div class='section-title'>배우 모아보기</div>", unsafe_allow_html=True)
+    tab_group, tab_pair = st.tabs(["그룹 모아보기", "배우 직접 선택 1:1 비교"])
+
+    with tab_group:
+        c1, c2 = st.columns(2)
+        with c1:
+            selected_programs = st.multiselect(
+                "작품",
+                options=sorted(raw_df["프로그램명"].dropna().astype(str).unique().tolist()),
+                placeholder="전체",
+            )
+            selected_gender = st.multiselect("성별", options=["남", "녀", "미상"], placeholder="전체")
+        with c2:
+            selected_total_grade = st.multiselect("합산등급", options=GRADE_ORDER, placeholder="전체")
+            selected_age_groups = st.multiselect(
+                "연령대",
+                options=sort_age_groups(result_df["연령대"].dropna().astype(str).unique().tolist()),
+                placeholder="전체",
+            )
+
+        c3, c4, c5 = st.columns(3)
+        with c3:
+            selected_prod_grade = st.multiselect("생산력등급", options=GRADE_ORDER, placeholder="전체")
+        with c4:
+            selected_stab_grade = st.multiselect("안정성등급", options=GRADE_ORDER, placeholder="전체")
+        with c5:
+            selected_contrib_grade = st.multiselect("기여도등급", options=GRADE_ORDER, placeholder="전체")
+
+        filtered = result_df.copy()
+        if selected_programs:
+            program_actor_names = raw_df[raw_df["프로그램명"].isin(selected_programs)]["인물명"].dropna().astype(str).unique().tolist()
+            filtered = filtered[filtered["배우"].isin(program_actor_names)].copy()
+        if selected_total_grade:
+            filtered = filtered[filtered["합산티어"].isin(selected_total_grade)].copy()
+        if selected_prod_grade:
+            filtered = filtered[filtered["생산력등급"].isin(selected_prod_grade)].copy()
+        if selected_stab_grade:
+            filtered = filtered[filtered["안정성등급"].isin(selected_stab_grade)].copy()
+        if selected_contrib_grade:
+            filtered = filtered[filtered["기여도등급"].isin(selected_contrib_grade)].copy()
+        if selected_gender:
+            filtered = filtered[filtered["성별"].isin(selected_gender)].copy()
+        if selected_age_groups:
+            filtered = filtered[filtered["연령대"].isin(selected_age_groups)].copy()
+
+        filtered = filtered.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).reset_index(drop=True)
+        st.caption(f"조건 일치 배우 {len(filtered):,}명")
+        if filtered.empty:
+            st.info("조건에 맞는 배우가 없습니다.")
+        else:
+            st.dataframe(
+                filtered[["배우", "성별", "연령대", "합산티어", "생산력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]]
+                .style.format({"합산점수": "{:.2f}", "배우화제성": "{:,.0f}", "출연작품수": "{:,.0f}"}),
+                use_container_width=True,
+                hide_index=True,
+                height=620,
+            )
+            render_actor_radar(filtered, filtered["배우"].head(8).tolist(), "조건 일치 상위 배우 비교 · 항목별 점수")
+
+    with tab_pair:
+        names = result_df["배우"].tolist()
+        left, right = st.columns(2)
+        with left:
+            actor1 = st.selectbox("배우 1", names, index=0, placeholder="배우명 검색", key="compare_actor_1")
+        with right:
+            default_idx = 1 if len(names) > 1 else 0
+            actor2 = st.selectbox("배우 2", names, index=default_idx, placeholder="배우명 검색", key="compare_actor_2")
+
+        selected_names = [a for a in [actor1, actor2] if a]
+        comp_df = compare_table_rows(result_df, selected_names)
+        st.dataframe(
+            comp_df.style.format({"합산점수": "{:.2f}", "배우화제성": "{:,.0f}", "출연작품수": "{:,.0f}"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+        render_actor_radar(result_df, comp_df["배우"].tolist(), "선택 배우 비교 · 항목별 점수", dynamic_range=True)
+
 
 def main():
     inject_css()
