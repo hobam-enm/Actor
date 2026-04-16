@@ -547,6 +547,141 @@ def top10_card(rank: int, name: str, tier: str, score: float):
     )
 
 
+def top3_card(rank: int, name: str, tier: str, score: float, subtitle: str = ""):
+    rank_sizes = {1: "1.18rem", 2: "1.08rem", 3: "1.02rem"}
+    st.markdown(
+        f"""
+        <div class='tiny-card' style='min-height:132px; padding:16px 16px;'>
+            {chip_html(f"{rank}위 · {tier}", tier)}
+            <div class='actor-name' style='font-size:{rank_sizes.get(rank, "1rem")}; margin-top:12px;'>{name}</div>
+            <div class='actor-sub'>합산점수 {format_score(score)}</div>
+            {f"<div class='actor-sub' style='margin-top:4px;'>{subtitle}</div>" if subtitle else ""}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def rank_list_card(rows: pd.DataFrame, start_rank: int = 4):
+    if rows.empty:
+        st.info("표시할 배우가 없습니다.")
+        return
+    lines = []
+    for i, (_, r) in enumerate(rows.iterrows(), start=start_rank):
+        lines.append(
+            f"""
+            <div style='display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #edf1f7;'>
+                <div style='min-width:0;'>
+                    <div style='font-size:0.92rem; font-weight:900; color:#111827;'>{i}위 {r['배우']}</div>
+                    <div style='font-size:0.8rem; color:#6b7280; margin-top:3px;'>{r['합산티어']}</div>
+                </div>
+                <div style='font-size:0.92rem; font-weight:900; color:#111827; white-space:nowrap;'>{format_score(r['합산점수'])}</div>
+            </div>
+            """
+        )
+    st.markdown(
+        f"""
+        <div class='card' style='padding:10px 18px 8px 18px;'>
+            {''.join(lines)}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def build_overview_demo_figures(result_df: pd.DataFrame):
+    gender_df = (
+        result_df[result_df['성별'].isin(['남', '여'])]
+        .groupby('성별', as_index=False)
+        .agg(배우수=('배우', 'count'))
+    )
+    if gender_df.empty:
+        gender_df = pd.DataFrame({'성별': ['남', '여'], '배우수': [0, 0]})
+    gender_df['비중'] = gender_df['배우수'] / max(gender_df['배우수'].sum(), 1)
+
+    gender_fig = go.Figure()
+    gender_fig.add_trace(
+        go.Bar(
+            x=gender_df['성별'],
+            y=gender_df['배우수'],
+            text=[f"{n:,}명<br>({p:.0%})" for n, p in zip(gender_df['배우수'], gender_df['비중'])],
+            textposition='outside',
+            marker=dict(color=['#2456ff', '#ef6a5b'][:len(gender_df)]),
+            hovertemplate='%{x}<br>배우 수 %{y:,}명<extra></extra>',
+        )
+    )
+    gender_fig.update_layout(
+        title='성별 분포',
+        height=320,
+        margin=dict(l=20, r=20, t=55, b=20),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=False,
+        xaxis_title='',
+        yaxis_title='배우 수',
+        yaxis=dict(gridcolor='#e8edf5')
+    )
+
+    age_df = (
+        result_df[result_df['연령대'].isin(AGE_GROUP_ORDER)]
+        .groupby('연령대', as_index=False)
+        .agg(배우수=('배우', 'count'))
+    )
+    if age_df.empty:
+        age_df = pd.DataFrame({'연령대': AGE_GROUP_ORDER, '배우수': [0] * len(AGE_GROUP_ORDER)})
+    else:
+        age_df['연령대'] = pd.Categorical(age_df['연령대'], categories=AGE_GROUP_ORDER, ordered=True)
+        age_df = age_df.sort_values('연령대')
+
+    age_fig = go.Figure()
+    age_fig.add_trace(
+        go.Bar(
+            x=age_df['연령대'].astype(str),
+            y=age_df['배우수'],
+            text=[f"{n:,}명" for n in age_df['배우수']],
+            textposition='outside',
+            marker=dict(color=['#9ab7ff', '#3f74ff', '#24baa1', '#f45b49'][:len(age_df)]),
+            hovertemplate='%{x}<br>배우 수 %{y:,}명<extra></extra>',
+        )
+    )
+    age_fig.update_layout(
+        title='연령대 분포',
+        height=320,
+        margin=dict(l=20, r=20, t=55, b=20),
+        paper_bgcolor='rgba(0,0,0,0)',
+        plot_bgcolor='rgba(0,0,0,0)',
+        showlegend=False,
+        xaxis_title='',
+        yaxis_title='배우 수',
+        yaxis=dict(gridcolor='#e8edf5')
+    )
+    return gender_fig, age_fig
+
+
+def render_highlight_rank_section(title: str, sub_df: pd.DataFrame, subtitle_builder=None, compact=False):
+    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+    rows = sub_df.sort_values(['합산점수', '배우화제성'], ascending=[False, False]).head(10).reset_index(drop=True)
+    if rows.empty:
+        st.info('표시할 배우가 없습니다.')
+        return
+
+    top_rows = rows.head(3)
+    rest_rows = rows.iloc[3:]
+
+    c1, c2 = st.columns([1.15, 1.85] if compact else [1.25, 1.75])
+
+    with c1:
+        for i, (_, r) in enumerate(top_rows.iterrows(), start=1):
+            subtitle = subtitle_builder(r) if subtitle_builder else ''
+            top3_card(i, r['배우'], r['합산티어'], r['합산점수'], subtitle=subtitle)
+            if i < len(top_rows):
+                st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+
+    with c2:
+        rank_list_card(rest_rows, start_rank=4)
+
+
 def representative_card(title: str, badge: str, rows: pd.DataFrame):
     lines = "".join([
         f"<div class='rep-line'><b>{r['배우']}</b> ({format_score(r['합산점수'])})</div>" for _, r in rows.iterrows()
@@ -918,37 +1053,46 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
     total_actors = result_df["배우"].nunique()
     total_programs = raw_df["프로그램명"].nunique()
-    top_ratio = (result_df["대분류티어"] == "Top").mean() * 100
     top1 = result_df.iloc[0]
 
-    c1, c2, c3, c4 = st.columns(4)
+    c1, c2, c3 = st.columns(3)
     with c1:
         metric_card("전체 배우", format_int(total_actors), "분석 대상 배우 수")
     with c2:
         metric_card("전체 작품", format_int(total_programs), "RAW 기준 프로그램 수")
     with c3:
-        metric_card("Top 비중", f"{top_ratio:.0f}%", "합산티어 기준")
-    with c4:
         metric_card("현재 1위 배우", top1["배우"], f"합산점수 {format_score(top1['합산점수'])}")
 
-    def render_rank_section(title: str, sub_df: pd.DataFrame, limit: int = 10):
-        st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
-        rows = sub_df.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).head(limit).reset_index(drop=True)
-        if rows.empty:
-            st.info("표시할 배우가 없습니다.")
-            return
-        cols = st.columns(5)
-        for i, (_, r) in enumerate(rows.iterrows()):
-            with cols[i % 5]:
-                top10_card(i + 1, r["배우"], r["합산티어"], r["합산점수"])
+    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
+    g1, g2 = st.columns(2)
+    gender_fig, age_fig = build_overview_demo_figures(result_df)
+    with g1:
+        st.plotly_chart(gender_fig, use_container_width=True)
+    with g2:
+        st.plotly_chart(age_fig, use_container_width=True)
 
-    render_rank_section("남배우 Top 10", result_df[result_df["성별"] == "남"])
-    render_rank_section("여배우 Top 10", result_df[result_df["성별"] == "여"])
-    for age_group in AGE_GROUP_ORDER:
-        render_rank_section(f"{age_group} Top 10", result_df[result_df["연령대"] == age_group])
+    render_highlight_rank_section(
+        "남배우 Top 10",
+        result_df[result_df["성별"] == "남"],
+        subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+    )
+    render_highlight_rank_section(
+        "여배우 Top 10",
+        result_df[result_df["성별"] == "여"],
+        subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+    )
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>연령대별 Top 10</div>", unsafe_allow_html=True)
+    age_cols = st.columns(2)
+    for i, age_group in enumerate(AGE_GROUP_ORDER):
+        with age_cols[i % 2]:
+            render_highlight_rank_section(
+                f"{age_group} Top 10",
+                result_df[result_df["연령대"] == age_group],
+                subtitle_builder=lambda r: f"{r.get('성별', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+                compact=True,
+            )
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>전체 배우 리스트</div>", unsafe_allow_html=True)
