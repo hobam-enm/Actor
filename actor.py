@@ -1,7 +1,11 @@
 import math
 import re
 import textwrap
+from functools import lru_cache
+from pathlib import Path
 from typing import Dict, List, Tuple
+
+import google.generativeai as genai
 
 import gspread
 import numpy as np
@@ -63,6 +67,120 @@ VISIBLE_COLUMNS = [
 ACTOR_META_REQUIRED_COLUMNS = ["배우명", "남녀", "출생연도"]
 AGE_GROUP_ORDER = ["20대", "30대", "40대", "50대"]
 CURRENT_YEAR = 2026
+
+ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_final.md"
+DEFAULT_ACTOR_COMBO_PROMPT = r"""역할: 너는 드라마 캐스팅 전략과 마케팅 구조를 함께 해석하는 콘텐츠/편성 전략 분석가다.
+
+목표: 입력된 배우들의 다차원 화제성 등급 정보를 바탕으로, 개별 배우의 단순 나열이 아니라 "배우 조합 구조"를 분석해 캐스팅 관점에서의 강점, 보완점, 시너지 구조를 실무형 코멘트로 정리한다.
+
+출력 형식: 반드시 HTML만 출력한다. Markdown, 코드블록, 일반 본문 설명은 금지한다.
+
+=== [입력 데이터 정의] ===
+입력에는 아래 정보가 포함된다.
+- 메인 배우 목록
+- 서브 배우 목록
+- 각 배우의 합산티어
+- 생산력등급
+- 안정성등급
+- 기여도등급
+- 합산점수
+- 생산/안정/기여 백분율
+- 역할군 내 상대위치 정보(있을 경우)
+- 필요 시 성별, 연령대, 출연작품수
+
+각 항목의 의미는 아래와 같이 해석한다.
+- 생산력: 화제성 파급력과 절대 규모
+- 안정성: 화제 흐름의 지속성과 변동성 완화 정도
+- 기여도: 작품 내 존재감과 중심축 역할의 강도
+- 합산티어: 전체 밸런스를 종합한 위치
+- 역할군 내 상대위치: 같은 선택 그룹 안에서의 상대적 강약, 그리고 해당 역할군에 기대되는 일반적 수준 대비 위치
+
+=== [매우 중요한 해석 원칙: 절대평가 + 상대평가 동시 적용] ===
+1. 절대 등급만 보지 말고 반드시 역할군 내부의 상대적 위치를 함께 해석한다.
+2. 특히 메인 배우는 일반적으로 상위 티어 중심으로 구성되는 경우가 많으므로, 같은 Top 티어라도 Top-A와 Top-C의 차이를 분명히 읽어야 한다.
+3. 예를 들어 메인 3인 중 2명이 Top-A이고 1명이 Top-C라면, Top-C 배우를 "전체 기준으로 높다"에서 멈추지 말고 "메인 조합 내부에서는 상대적으로 낮은 축"으로 해석해야 한다.
+4. 즉 어떤 배우가 절대적으로는 상위권이라도, 같은 조합 안에서 비교하면 견인력·안정성·기여도의 상대적 무게가 다를 수 있다는 점을 반영한다.
+5. 서브 배우도 마찬가지로 절대 등급과 함께, 서브 조합 내에서 누가 중심 보완축인지, 누가 균형형인지, 누가 상대적으로 약한 축인지를 해석한다.
+6. 다만 상대적으로 낮다고 해서 부정적으로 단정하지 말고, "조합 내 역할상 보완축", "전면 견인보다는 보조 시너지형"처럼 기능적으로 번역한다.
+7. 전체 평가는 반드시 "절대 수준"과 "조합 내부 구조"를 함께 반영해 작성한다.
+
+=== [핵심 해석 원칙] ===
+1. 개별 배우 설명보다 조합의 구조를 먼저 본다.
+2. 메인 배우는 작품의 전면 인지도, 초반 진입, 화제 견인 구조 중심으로 해석한다.
+3. 서브 배우는 안정감, 보완성, 밸런스, 완성도 보강 측면에서 해석한다.
+4. 기여도등급이 높지 않은 배우는 "단독 견인형"으로 과장하지 않는다.
+5. 생산력은 높지만 안정성 또는 기여도가 낮으면, 폭발력은 있으나 구조적 보완이 필요한 유형으로 해석한다.
+6. 안정성은 높지만 생산력이 낮으면, 화제의 상한 확대보다는 흐름 유지형으로 해석한다.
+7. 서브 배우는 주연급 표현보다 조합 보완 표현을 우선 사용한다.
+8. 단순히 등급을 반복하지 말고, 등급이 어떤 조합 효과를 만드는지 번역해서 설명한다.
+9. "흥행 보장", "무조건 성공" 같은 단정 표현은 금지한다.
+10. 전체 평가는 강점과 보완점을 함께 제시한다.
+11. 조합 안에서 상대적으로 높은 배우와 낮은 배우가 함께 있으면, 누가 전면 견인축이고 누가 보완축인지 구조적으로 설명한다.
+12. 같은 축이 과도하게 몰려 있으면 장점과 한계를 동시에 적는다. 예: 생산력은 강하지만 기여도 중심축이 약한 조합.
+13. 조합이 전반적으로 균형적이면 "폭발력"보다 "안정적 운용 가능성"에 방점을 둔다.
+14. 일부 배우가 절대 수준은 높지만 해당 그룹 기대치 대비 약하면, "체급은 충분하지만 조합 내 상대강도는 다소 낮다"는 식으로 완곡하게 표현한다.
+
+=== [문체 규칙] ===
+1. 한국어로 작성한다.
+2. 보고서/인사이트 메모 톤으로 쓴다.
+3. 추상어만 쓰지 말고 반드시 이유를 붙인다.
+4. 같은 표현을 반복하지 않는다.
+5. 배우를 과도하게 칭찬하거나 깎아내리지 않는다.
+6. 실무자가 바로 활용할 수 있는 표현으로 쓴다.
+7. 출력 전체는 너무 길지 않게, 하지만 구조가 읽히도록 작성한다.
+8. 문장은 명확하게 끊고, 한 문장에 평가 포인트를 과도하게 몰아넣지 않는다.
+
+=== [출력 형식: HTML ONLY] ===
+반드시 아래 구조의 HTML만 출력한다. class명은 유지한다. 불필요한 바깥 설명은 금지한다.
+
+<div class="actor-combo-report">
+<div class="combo-section">
+<h3>[메인 n인]</h3>
+<ul>
+<li><strong>배우명</strong>: 역할 해석 1~2문장</li>
+<li><strong>배우명</strong>: 역할 해석 1~2문장</li>
+</ul>
+<p class="section-summary">메인 조합 전체 요약 1~2문장</p>
+</div>
+<div class="combo-section">
+<h3>[서브 n인]</h3>
+<ul>
+<li><strong>배우명 또는 배우명 묶음</strong>: 역할 해석 1~2문장</li>
+<li><strong>배우명 또는 배우명 묶음</strong>: 역할 해석 1~2문장</li>
+</ul>
+<p class="section-summary">서브 조합 전체 요약 1~2문장</p>
+</div>
+<div class="combo-section total">
+<h3>[종합 평가]</h3>
+<ul>
+<li>전체 조합의 강점</li>
+<li>메인/서브 상호작용 구조</li>
+<li>보완 필요 포인트</li>
+</ul>
+</div>
+</div>
+
+=== [출력 규칙 상세] ===
+1. HTML 태그 외의 텍스트는 출력하지 않는다.
+2. Markdown 문법 사용 금지.
+3. 코드블록 사용 금지.
+4. h3 제목은 정확히 [메인 n인], [서브 n인], [종합 평가] 형식을 따른다.
+5. 메인/서브 배우 수는 실제 입력 수에 맞춰 n값을 바꾼다.
+6. 종합 평가는 3~5개의 li로 정리한다.
+7. 각 배우 설명은 이름 뒤에 콜론을 붙여 자연문으로 쓴다.
+8. 필요 시 서브 배우는 개별 설명과 묶음 설명을 혼용할 수 있다.
+9. 문장 안에서 등급명을 그대로 반복하지 말고 의미를 번역해라.
+10. 단, 상대평가가 핵심인 경우에는 "메인 조합 내에서는 상대적으로", "서브 축 안에서는 비교적" 같은 표현을 사용해 구조를 설명해라.
+
+=== [금지 사항] ===
+- 등급명만 기계적으로 반복하는 문장
+- 입력에 없는 작품명, 사건, 평판을 지어내는 내용
+- 흥행 성공 여부를 단정하는 표현
+- 모호한 미사여구 위주의 문장
+- 불필요한 서론/결론
+- "A가 B보다 무조건 낫다" 식의 단순 우열 문장
+- 상대적으로 낮은 배우를 직접적으로 깎아내리는 표현
+"""
 
 
 def inject_css():
@@ -243,6 +361,32 @@ def inject_css():
             margin: -6px 0 14px 0.15rem;
         }
 
+
+        .actor-combo-toolbar {margin: 0.2rem 0 1rem 0;}
+        .actor-combo-toolbar .hint {font-size:0.88rem; color:#6b7280; margin-top:4px;}
+        .actor-combo-box {
+            background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+            border: 1px solid #e7ebf3;
+            border-radius: 22px;
+            padding: 18px 18px;
+            box-shadow: 0 8px 22px rgba(31,41,55,0.04);
+        }
+        .actor-combo-report {display:flex; flex-direction:column; gap:14px;}
+        .actor-combo-report .combo-section {
+            background:#fff; border:1px solid #e7ebf3; border-radius:18px; padding:16px 18px;
+            box-shadow: 0 6px 18px rgba(31,41,55,0.04);
+        }
+        .actor-combo-report .combo-section.total {
+            border: 1.5px solid #bfd1ff;
+            box-shadow: 0 8px 22px rgba(36,86,255,0.08);
+        }
+        .actor-combo-report h3 {font-size:1.02rem; font-weight:900; color:#172033; margin:0 0 10px 0;}
+        .actor-combo-report ul {margin:0; padding-left:1.2rem;}
+        .actor-combo-report li {margin:0 0 10px 0; color:#374151; line-height:1.75;}
+        .actor-combo-report .section-summary {
+            margin: 10px 0 0 0; padding:12px 14px; border-radius:14px;
+            background:#f7faff; color:#24324a; font-size:0.92rem; line-height:1.75; font-weight:700;
+        }
         </style>
         """,
         unsafe_allow_html=True,
@@ -1303,6 +1447,254 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         render_actor_radar(result_df, comp_df["배우"].tolist(), "선택 배우 비교 · 항목별 점수", dynamic_range=True)
 
 
+@lru_cache(maxsize=1)
+def load_actor_combo_prompt() -> str:
+    candidates = [
+        Path(__file__).resolve().parent / ACTOR_COMBO_PROMPT_FILE,
+        Path.cwd() / ACTOR_COMBO_PROMPT_FILE,
+    ]
+    for prompt_path in candidates:
+        if prompt_path.is_file():
+            try:
+                txt = prompt_path.read_text(encoding="utf-8").strip()
+                if txt:
+                    return txt
+            except Exception:
+                pass
+    return DEFAULT_ACTOR_COMBO_PROMPT.strip()
+
+
+def get_gemini_keys() -> List[str]:
+    keys = []
+    try:
+        chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
+        api_keys = chatbot_cfg.get("api_keys", {}) if isinstance(chatbot_cfg, dict) else {}
+        if isinstance(api_keys, dict):
+            keys.extend([str(k).strip() for k in api_keys.get("gemini", []) or [] if str(k).strip()])
+    except Exception:
+        pass
+    try:
+        keys.extend([str(k).strip() for k in st.secrets.get("GEMINI_API_KEYS", []) or [] if str(k).strip()])
+    except Exception:
+        pass
+    dedup = []
+    for key in keys:
+        if key and key not in dedup:
+            dedup.append(key)
+    return dedup
+
+
+def grade_rank_value(grade: str) -> int:
+    try:
+        return GRADE_ORDER.index(str(grade))
+    except ValueError:
+        return len(GRADE_ORDER)
+
+
+def build_relative_position_lines(group_df: pd.DataFrame, label: str) -> List[str]:
+    lines: List[str] = []
+    if group_df.empty:
+        return lines
+    total_sorted = group_df.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).reset_index(drop=True)
+    if len(total_sorted) >= 2:
+        top_name = total_sorted.iloc[0]["배우"]
+        low_name = total_sorted.iloc[-1]["배우"]
+        lines.append(f"- {label} 조합 내 합산점수 최고: {top_name}")
+        if top_name != low_name:
+            lines.append(f"- {label} 조합 내 합산점수 최저: {low_name}")
+
+    for axis_label, grade_col, pct_col in [
+        ("생산력", "생산력등급", "생산백분율"),
+        ("안정성", "안정성등급", "안정백분율"),
+        ("기여도", "기여도등급", "기여백분율"),
+    ]:
+        axis_sorted = group_df.sort_values([pct_col, "합산점수"], ascending=[False, False]).reset_index(drop=True)
+        if axis_sorted.empty:
+            continue
+        high_row = axis_sorted.iloc[0]
+        low_row = axis_sorted.iloc[-1]
+        lines.append(f"- {label} 조합 내 {axis_label} 상대상위: {high_row['배우']} ({high_row[grade_col]}, {high_row[pct_col] * 100:.1f}%)")
+        if len(axis_sorted) >= 2 and high_row['배우'] != low_row['배우']:
+            lines.append(f"- {label} 조합 내 {axis_label} 상대하위: {low_row['배우']} ({low_row[grade_col]}, {low_row[pct_col] * 100:.1f}%)")
+
+    grade_counts = group_df["합산티어"].value_counts().reindex(GRADE_ORDER, fill_value=0)
+    nonzero = [f"{grade} {int(cnt)}명" for grade, cnt in grade_counts.items() if cnt > 0]
+    if nonzero:
+        lines.append(f"- {label} 합산티어 분포: " + ", ".join(nonzero))
+    return lines
+
+
+def build_actor_group_payload(group_df: pd.DataFrame, label: str, expectation_note: str) -> str:
+    if group_df.empty:
+        return f"[{label}]\n- 선택 없음"
+
+    ordered = group_df.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).reset_index(drop=True)
+    lines = [f"[{label}]", f"- 그룹 기대치: {expectation_note}"]
+    group_size = len(ordered)
+
+    for idx, row in ordered.iterrows():
+        total_rank = idx + 1
+        total_pos = "상위" if total_rank == 1 else ("중위" if total_rank < group_size else "하위")
+        line = (
+            f"- {row['배우']} | 성별 {row['성별']} | 연령대 {row['연령대']} | 합산티어 {row['합산티어']} | "
+            f"생산력등급 {row['생산력등급']} | 안정성등급 {row['안정성등급']} | 기여도등급 {row['기여도등급']} | "
+            f"합산점수 {row['합산점수']:.2f} | 생산백분율 {row['생산백분율'] * 100:.1f}% | "
+            f"안정백분율 {row['안정백분율'] * 100:.1f}% | 기여백분율 {row['기여백분율'] * 100:.1f}% | "
+            f"배우화제성 {row['배우화제성']:.0f} | 출연작품수 {row['출연작품수']:.0f} | "
+            f"{label} 내부 합산위치 {total_rank}/{group_size} ({total_pos})"
+        )
+        lines.append(line)
+
+    lines.append(f"[{label} 상대구조 참고]")
+    lines.extend(build_relative_position_lines(ordered, label))
+    return "\n".join(lines)
+
+
+def build_actor_combo_payload(result_df: pd.DataFrame, main_names: List[str], sub_names: List[str]) -> Tuple[str, pd.DataFrame]:
+    selected_names = [name for name in main_names + sub_names if name]
+    selected_df = result_df[result_df["배우"].isin(selected_names)].copy()
+    if selected_df.empty:
+        return "", selected_df
+
+    selected_df["역할구분"] = selected_df["배우"].apply(lambda x: "메인" if x in main_names else "서브")
+    selected_df["역할군기대치"] = selected_df["역할구분"].map({
+        "메인": "메인 배우는 일반적으로 상위 티어 중심으로 구성되므로, 같은 Top 티어 내에서도 세부 등급 차이를 엄격하게 해석할 것.",
+        "서브": "서브 배우는 전면 견인보다 보완성과 균형감이 중요하므로, 절대 체급보다 조합 내 기능 차이를 함께 해석할 것.",
+    })
+
+    main_df = selected_df[selected_df["역할구분"] == "메인"].copy()
+    sub_df = selected_df[selected_df["역할구분"] == "서브"].copy()
+
+    sections = [
+        "[분석 목적]",
+        "- 선택된 배우 조합의 절대 수준과 조합 내부 상대 구조를 함께 해석할 것.",
+        "- 전체 기준 체급과 역할군 내부 상대위치를 동시에 고려할 것.",
+        f"- 총 선택 배우 수: {len(selected_df)}명",
+        f"- 메인 배우 수: {len(main_df)}명",
+        f"- 서브 배우 수: {len(sub_df)}명",
+        "",
+        build_actor_group_payload(main_df, f"메인 {len(main_df)}인", "메인 배우는 원래 상위 티어급에서 주로 구성되므로, 같은 Top 안에서도 Top-A와 Top-C 차이를 분명히 읽어야 함."),
+        "",
+        build_actor_group_payload(sub_df, f"서브 {len(sub_df)}인", "서브 배우는 전면 견인보다는 조합 보완 역할이 많으므로, 절대 순위보다 안정감·균형감·보완 기능을 함께 해석해야 함."),
+    ]
+    return "\n".join(sections).strip(), selected_df
+
+
+def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
+    keys = get_gemini_keys()
+    if not keys:
+        return "<div class='actor-combo-box'>Gemini API Key가 설정되지 않았습니다.</div>"
+
+    from google.generativeai.types import HarmBlockThreshold, HarmCategory
+    safety_settings = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
+
+    model_name = "gemini-3-flash-preview"
+    try:
+        chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
+        model_name = str(chatbot_cfg.get("gemini_model") or model_name)
+    except Exception:
+        pass
+
+    last_error = None
+    for key in keys:
+        try:
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel(
+                model_name,
+                generation_config={"temperature": 0.2, "max_output_tokens": 4096},
+                system_instruction=system_instruction,
+            )
+            resp = model.generate_content(
+                user_payload,
+                request_options={"timeout": 180},
+                safety_settings=safety_settings,
+            )
+            if getattr(resp, "text", None):
+                return resp.text
+            if c0 := (getattr(resp, "candidates", None) or [None])[0]:
+                if p0 := (getattr(c0, "content", None) and getattr(c0.content, "parts", None) or [None])[0]:
+                    if hasattr(p0, "text"):
+                        return p0.text
+            return "<div class='actor-combo-box'>AI 응답이 비어 있습니다.</div>"
+        except Exception as e:
+            last_error = e
+            if "429" in str(e) or "quota" in str(e).lower():
+                continue
+    msg = str(last_error) if last_error else "알 수 없는 오류"
+    return f"<div class='actor-combo-box'>AI 분석 중 오류가 발생했습니다.<br>{msg}</div>"
+
+
+def render_actor_combo_ai(result_df: pd.DataFrame):
+    st.markdown("<div class='section-title'>배우 조합 분석(AI)</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='actor-combo-toolbar'><div class='hint'>메인 배우와 서브 배우를 나누어 선택하면, 절대 등급과 조합 내부 상대구조를 함께 반영해 AI가 조합을 해석합니다.</div></div>",
+        unsafe_allow_html=True,
+    )
+
+    actor_options = result_df.sort_values(["합산점수", "배우화제성"], ascending=[False, False])["배우"].tolist()
+    default_main = actor_options[:2] if len(actor_options) >= 2 else actor_options[:1]
+
+    left, right = st.columns(2)
+    with left:
+        main_names = st.multiselect(
+            "메인 배우 선택",
+            options=actor_options,
+            default=default_main,
+            placeholder="메인 배우를 선택하세요",
+            key="actor_combo_main",
+        )
+    sub_options = [name for name in actor_options if name not in main_names]
+    with right:
+        sub_names = st.multiselect(
+            "서브 배우 선택",
+            options=sub_options,
+            placeholder="서브 배우를 선택하세요",
+            key="actor_combo_sub",
+        )
+
+    selected_names = main_names + sub_names
+    if len(selected_names) != len(set(selected_names)):
+        st.warning("동일 배우는 메인/서브에 중복 선택할 수 없습니다.")
+        return
+
+    selected_df = result_df[result_df["배우"].isin(selected_names)].copy()
+    if not selected_df.empty:
+        display_df = selected_df.copy()
+        display_df["역할구분"] = display_df["배우"].apply(lambda x: "메인" if x in main_names else "서브")
+        display_df = display_df.sort_values(["역할구분", "합산점수", "배우화제성"], ascending=[True, False, False])
+        st.dataframe(
+            display_df[["역할구분", "배우", "성별", "연령대", "합산티어", "생산력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]]
+            .style.format({"합산점수": "{:.2f}", "배우화제성": "{:,.0f}", "출연작품수": "{:,.0f}"}),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    if not main_names:
+        st.info("메인 배우는 최소 1명 이상 선택해주세요.")
+        return
+    if len(selected_names) < 2:
+        st.info("전체 배우를 2명 이상 선택하면 조합 분석을 실행할 수 있습니다.")
+        return
+
+    if st.button("AI 조합 분석 시작", type="primary", use_container_width=True):
+        prompt = load_actor_combo_prompt()
+        payload, payload_df = build_actor_combo_payload(result_df, main_names, sub_names)
+        if payload_df.empty:
+            st.warning("선택 배우 데이터를 찾지 못했습니다.")
+            return
+        with st.spinner("배우 조합을 분석하는 중입니다..."):
+            html = call_actor_combo_ai(prompt, payload)
+        st.markdown(html, unsafe_allow_html=True)
+        with st.expander("Gemini 전달 데이터 보기"):
+            st.code(payload, language="text")
+
+
+
 def main():
     inject_css()
     st.markdown("<div class='page-title'>배우 다차원 화제성 지표 - 드라마</div>", unsafe_allow_html=True)
@@ -1314,7 +1706,7 @@ def main():
 
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-        page = st.radio("", ["OVERVIEW", "배우 상세보기", "배우 모아보기", "참고사항"], index=0, label_visibility="collapsed")
+        page = st.radio("", ["OVERVIEW", "배우 상세보기", "배우 모아보기", "배우 조합 분석(AI)", "참고사항"], index=0, label_visibility="collapsed")
         st.markdown("<div class='sidebar-footnote'>문의 : 미디어마케팅팀 데이터인사이트파트</div>", unsafe_allow_html=True)
 
     if page == "OVERVIEW":
@@ -1323,6 +1715,8 @@ def main():
         render_detail(raw_df, result_df)
     elif page == "배우 모아보기":
         render_compare(raw_df, result_df)
+    elif page == "배우 조합 분석(AI)":
+        render_actor_combo_ai(result_df)
     else:
         render_reference()
 
