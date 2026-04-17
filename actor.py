@@ -68,7 +68,7 @@ ACTOR_META_REQUIRED_COLUMNS = ["배우명", "남녀", "출생연도"]
 AGE_GROUP_ORDER = ["20대", "30대", "40대", "50대"]
 CURRENT_YEAR = 2026
 
-ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_final.md"
+ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_advanced.md"
 DEFAULT_ACTOR_COMBO_PROMPT = r"""역할: 너는 드라마 캐스팅 전략과 마케팅 구조를 함께 해석하는 콘텐츠/편성 전략 분석가다.
 
 목표: 입력된 배우들의 다차원 화제성 등급 정보를 바탕으로, 개별 배우의 단순 나열이 아니라 "배우 조합 구조"를 분석해 캐스팅 관점에서의 강점, 보완점, 시너지 구조를 실무형 코멘트로 정리한다.
@@ -1466,21 +1466,17 @@ def load_actor_combo_prompt() -> str:
 
 def get_gemini_keys() -> List[str]:
     keys = []
-
     try:
-        if "chatbot" in st.secrets:
-            chatbot_cfg = st.secrets["chatbot"]
-            api_keys = chatbot_cfg.get("api_keys", {})
-            gemini_keys = api_keys.get("gemini", [])
-            keys.extend([str(k).strip() for k in gemini_keys if str(k).strip()])
+        chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
+        api_keys = chatbot_cfg.get("api_keys", {}) if isinstance(chatbot_cfg, dict) else {}
+        if isinstance(api_keys, dict):
+            keys.extend([str(k).strip() for k in api_keys.get("gemini", []) or [] if str(k).strip()])
     except Exception:
         pass
-
     try:
         keys.extend([str(k).strip() for k in st.secrets.get("GEMINI_API_KEYS", []) or [] if str(k).strip()])
     except Exception:
         pass
-
     dedup = []
     for key in keys:
         if key and key not in dedup:
@@ -1528,9 +1524,55 @@ def build_relative_position_lines(group_df: pd.DataFrame, label: str) -> List[st
     return lines
 
 
-def build_actor_group_payload(group_df: pd.DataFrame, label: str, expectation_note: str) -> str:
+def build_actor_work_summary(raw_df: pd.DataFrame, actor_name: str, top_n: int = 3) -> str:
+    actor_df = raw_df[raw_df["인물명"].astype(str).str.strip() == str(actor_name).strip()].copy()
+    if actor_df.empty:
+        return "전작 정보 없음"
+
+    work_df = (
+        actor_df.groupby("프로그램명", as_index=False)
+        .agg(
+            배우화제성합=("배우화제성", "sum"),
+            드라마화제성합=("드라마화제성", "sum"),
+            랭크인주차합=("랭크인주차", "sum"),
+            최고작품내랭킹=("작품내랭킹", "min"),
+        )
+        .sort_values(["배우화제성합", "랭크인주차합"], ascending=[False, False])
+        .head(top_n)
+    )
+    items = []
+    for _, row in work_df.iterrows():
+        items.append(
+            f"{row['프로그램명']}(배우화제성 {row['배우화제성합']:.0f}, 드라마화제성 {row['드라마화제성합']:.0f}, 랭크인주차 {row['랭크인주차합']:.0f}, 최고 작품내랭킹 {row['최고작품내랭킹']:.0f})"
+        )
+    return "; ".join(items) if items else "전작 정보 없음"
+
+
+def build_group_context_lines(group_df: pd.DataFrame, label: str) -> List[str]:
+    lines: List[str] = []
     if group_df.empty:
-        return f"[{label}]\n- 선택 없음"
+        return lines
+
+    grade_counts = group_df["합산티어"].value_counts().reindex(GRADE_ORDER, fill_value=0)
+    top_count = int(group_df["합산티어"].astype(str).str.startswith("Top").sum())
+    middle_count = int(group_df["합산티어"].astype(str).str.startswith("Middle").sum())
+    base_count = int(group_df["합산티어"].astype(str).str.startswith("Base").sum())
+    lines.append(f"- {label} 체급 요약: Top {top_count}명, Middle {middle_count}명, Base {base_count}명")
+
+    for axis_label, pct_col in [("생산력", "생산백분율"), ("안정성", "안정백분율"), ("기여도", "기여백분율")]:
+        lines.append(
+            f"- {label} {axis_label} 평균백분율: {group_df[pct_col].mean() * 100:.1f}% | 최고 {group_df[pct_col].max() * 100:.1f}% | 최저 {group_df[pct_col].min() * 100:.1f}%"
+        )
+
+    nonzero = [f"{grade} {int(cnt)}명" for grade, cnt in grade_counts.items() if cnt > 0]
+    if nonzero:
+        lines.append(f"- {label} 합산티어 분포: " + ", ".join(nonzero))
+    return lines
+
+
+def build_actor_group_payload(raw_df: pd.DataFrame, group_df: pd.DataFrame, label: str, expectation_note: str) -> str:
+    if group_df.empty:
+        return ""
 
     ordered = group_df.sort_values(["합산점수", "배우화제성"], ascending=[False, False]).reset_index(drop=True)
     lines = [f"[{label}]", f"- 그룹 기대치: {expectation_note}"]
@@ -1548,40 +1590,52 @@ def build_actor_group_payload(group_df: pd.DataFrame, label: str, expectation_no
             f"{label} 내부 합산위치 {total_rank}/{group_size} ({total_pos})"
         )
         lines.append(line)
+        works = build_actor_work_summary(raw_df, row["배우"], top_n=3)
+        lines.append(f"  · 전작요약: {works}")
 
     lines.append(f"[{label} 상대구조 참고]")
     lines.extend(build_relative_position_lines(ordered, label))
+    lines.append(f"[{label} 종합지표 참고]")
+    lines.extend(build_group_context_lines(ordered, label))
     return "\n".join(lines)
 
 
-def build_actor_combo_payload(result_df: pd.DataFrame, main_names: List[str], sub_names: List[str]) -> Tuple[str, pd.DataFrame]:
+def build_actor_combo_payload(raw_df: pd.DataFrame, result_df: pd.DataFrame, main_names: List[str], sub_names: List[str]) -> Tuple[str, pd.DataFrame]:
     selected_names = [name for name in main_names + sub_names if name]
     selected_df = result_df[result_df["배우"].isin(selected_names)].copy()
     if selected_df.empty:
         return "", selected_df
 
     selected_df["역할구분"] = selected_df["배우"].apply(lambda x: "메인" if x in main_names else "서브")
-    selected_df["역할군기대치"] = selected_df["역할구분"].map({
-        "메인": "메인 배우는 일반적으로 상위 티어 중심으로 구성되므로, 같은 Top 티어 내에서도 세부 등급 차이를 엄격하게 해석할 것.",
-        "서브": "서브 배우는 전면 견인보다 보완성과 균형감이 중요하므로, 절대 체급보다 조합 내 기능 차이를 함께 해석할 것.",
-    })
 
     main_df = selected_df[selected_df["역할구분"] == "메인"].copy()
     sub_df = selected_df[selected_df["역할구분"] == "서브"].copy()
 
     sections = [
         "[분석 목적]",
-        "- 선택된 배우 조합의 절대 수준과 조합 내부 상대 구조를 함께 해석할 것.",
+        "- 선택된 배우 조합의 절대 수준, 조합 내부 상대 구조, 전작 기반 맥락을 함께 해석할 것.",
         "- 전체 기준 체급과 역할군 내부 상대위치를 동시에 고려할 것.",
+        "- 전작 정보는 배우의 반복 패턴과 강점 방향을 참고하는 보조 정보로만 사용할 것.",
+        "- 입력 데이터만으로 판단 가능한 범위 안에서 종합적으로 해석할 것.",
         f"- 총 선택 배우 수: {len(selected_df)}명",
         f"- 메인 배우 수: {len(main_df)}명",
         f"- 서브 배우 수: {len(sub_df)}명",
         "",
-        build_actor_group_payload(main_df, f"메인 {len(main_df)}인", "메인 배우는 원래 상위 티어급에서 주로 구성되므로, 같은 Top 안에서도 Top-A와 Top-C 차이를 분명히 읽어야 함."),
-        "",
-        build_actor_group_payload(sub_df, f"서브 {len(sub_df)}인", "서브 배우는 전면 견인보다는 조합 보완 역할이 많으므로, 절대 순위보다 안정감·균형감·보완 기능을 함께 해석해야 함."),
+        build_actor_group_payload(raw_df, main_df, f"메인 {len(main_df)}인", "메인 배우는 원래 상위 티어급에서 주로 구성되므로, 같은 Top 안에서도 Top-A와 Top-C 차이를 분명히 읽어야 함. 동시에 전작 흐름상 실제 파급력 패턴이 반복되는지도 함께 볼 것."),
     ]
-    return "\n".join(sections).strip(), selected_df
+    if not sub_df.empty:
+        sections.extend([
+            "",
+            build_actor_group_payload(raw_df, sub_df, f"서브 {len(sub_df)}인", "서브 배우는 전면 견인보다는 조합 보완 역할이 많으므로, 절대 순위보다 안정감·균형감·보완 기능을 함께 해석해야 함. 전작 흐름에서 반복적으로 드러난 보완 성격도 함께 참고할 것."),
+        ])
+    else:
+        sections.extend([
+            "",
+            "[서브 배우 정보]",
+            "- 이번 분석에는 서브 배우 선택이 없음.",
+            "- 출력 시 서브 관련 섹션은 생성하지 말 것.",
+        ])
+    return "\n".join([s for s in sections if s is not None]).strip(), selected_df
 
 
 def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
@@ -1633,7 +1687,7 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
     return f"<div class='actor-combo-box'>AI 분석 중 오류가 발생했습니다.<br>{msg}</div>"
 
 
-def render_actor_combo_ai(result_df: pd.DataFrame):
+def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>배우 조합 분석(AI)</div>", unsafe_allow_html=True)
     st.markdown(
         "<div class='actor-combo-toolbar'><div class='hint'>메인 배우와 서브 배우를 나누어 선택하면, 절대 등급과 조합 내부 상대구조를 함께 반영해 AI가 조합을 해석합니다.</div></div>",
@@ -1687,7 +1741,7 @@ def render_actor_combo_ai(result_df: pd.DataFrame):
 
     if st.button("AI 조합 분석 시작", type="primary", use_container_width=True):
         prompt = load_actor_combo_prompt()
-        payload, payload_df = build_actor_combo_payload(result_df, main_names, sub_names)
+        payload, payload_df = build_actor_combo_payload(raw_df, result_df, main_names, sub_names)
         if payload_df.empty:
             st.warning("선택 배우 데이터를 찾지 못했습니다.")
             return
@@ -1720,7 +1774,7 @@ def main():
     elif page == "배우 모아보기":
         render_compare(raw_df, result_df)
     elif page == "배우 조합 분석(AI)":
-        render_actor_combo_ai(result_df)
+        render_actor_combo_ai(raw_df, result_df)
     else:
         render_reference()
 
