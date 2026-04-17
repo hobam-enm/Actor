@@ -1677,7 +1677,7 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str, use_groundin
                 "safety_settings": safety_settings,
             }
             if use_grounding:
-                gen_kwargs["tools"] = "google_search_retrieval"
+                gen_kwargs["tools"] = "google_search"
             try:
                 resp = model.generate_content(user_payload, **gen_kwargs)
             except TypeError as tool_err:
