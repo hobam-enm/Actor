@@ -5,7 +5,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Dict, List, Tuple
 
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 
 import gspread
 import numpy as np
@@ -1647,14 +1648,6 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str, use_groundin
     if not keys:
         return "<div class='actor-combo-box'>Gemini API Key가 설정되지 않았습니다.</div>"
 
-    from google.generativeai.types import HarmBlockThreshold, HarmCategory
-    safety_settings = {
-        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
-        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
-    }
-
     model_name = "gemini-3-flash-preview"
     try:
         chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
@@ -1664,41 +1657,50 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str, use_groundin
 
     last_error = None
     grounding_last_error = None
+
     for key in keys:
         try:
-            genai.configure(api_key=key)
-            model = genai.GenerativeModel(
-                model_name,
-                generation_config={"temperature": 0.2, "max_output_tokens": 4096},
-                system_instruction=system_instruction,
-            )
-            gen_kwargs = {
-                "request_options": {"timeout": 180},
-                "safety_settings": safety_settings,
+            client = genai.Client(api_key=key)
+            config_kwargs = {
+                "temperature": 0.2,
+                "max_output_tokens": 4096,
             }
+            if system_instruction and system_instruction.strip():
+                config_kwargs["system_instruction"] = system_instruction
             if use_grounding:
-                gen_kwargs["tools"] = "google_search"
-            try:
-                resp = model.generate_content(user_payload, **gen_kwargs)
-            except TypeError as tool_err:
-                if use_grounding:
-                    grounding_last_error = tool_err
-                    gen_kwargs.pop("tools", None)
-                    resp = model.generate_content(user_payload, **gen_kwargs)
-                else:
-                    raise
-            if getattr(resp, "text", None):
-                return resp.text
-            if c0 := (getattr(resp, "candidates", None) or [None])[0]:
-                if p0 := (getattr(c0, "content", None) and getattr(c0.content, "parts", None) or [None])[0]:
-                    if hasattr(p0, "text"):
-                        return p0.text
+                config_kwargs["tools"] = [types.Tool(google_search=types.GoogleSearch())]
+
+            resp = client.models.generate_content(
+                model=model_name,
+                contents=user_payload,
+                config=types.GenerateContentConfig(**config_kwargs),
+            )
+
+            text = getattr(resp, "text", None)
+            if text:
+                return text
+
+            candidates = getattr(resp, "candidates", None) or []
+            if candidates:
+                candidate = candidates[0]
+                content = getattr(candidate, "content", None)
+                parts = getattr(content, "parts", None) or []
+                part_texts = []
+                for part in parts:
+                    pt = getattr(part, "text", None)
+                    if pt:
+                        part_texts.append(pt)
+                if part_texts:
+                    return "\n".join(part_texts)
+
             return "<div class='actor-combo-box'>AI 응답이 비어 있습니다.</div>"
+
         except Exception as e:
             last_error = e
-            if use_grounding and any(token in str(e).lower() for token in ["tool", "search", "ground", "retrieval"]):
+            msg = str(e).lower()
+            if use_grounding and any(token in msg for token in ["tool", "search", "ground", "retrieval"]):
                 grounding_last_error = e
-            if "429" in str(e) or "quota" in str(e).lower():
+            if "429" in msg or "quota" in msg or "resource_exhausted" in msg:
                 continue
 
     if grounding_last_error and not last_error:
