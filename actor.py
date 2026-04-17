@@ -1466,17 +1466,21 @@ def load_actor_combo_prompt() -> str:
 
 def get_gemini_keys() -> List[str]:
     keys = []
+
     try:
-        chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
-        api_keys = chatbot_cfg.get("api_keys", {}) if isinstance(chatbot_cfg, dict) else {}
-        if isinstance(api_keys, dict):
-            keys.extend([str(k).strip() for k in api_keys.get("gemini", []) or [] if str(k).strip()])
+        if "chatbot" in st.secrets:
+            chatbot_cfg = st.secrets["chatbot"]
+            api_keys = chatbot_cfg.get("api_keys", {})
+            gemini_keys = api_keys.get("gemini", [])
+            keys.extend([str(k).strip() for k in gemini_keys if str(k).strip()])
     except Exception:
         pass
+
     try:
         keys.extend([str(k).strip() for k in st.secrets.get("GEMINI_API_KEYS", []) or [] if str(k).strip()])
     except Exception:
         pass
+
     dedup = []
     for key in keys:
         if key and key not in dedup:
