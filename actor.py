@@ -68,7 +68,7 @@ ACTOR_META_REQUIRED_COLUMNS = ["배우명", "남녀", "출생연도"]
 AGE_GROUP_ORDER = ["20대", "30대", "40대", "50대"]
 CURRENT_YEAR = 2026
 
-ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_advanced.md"
+ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_grounded.md"
 DEFAULT_ACTOR_COMBO_PROMPT = r"""역할: 너는 드라마 캐스팅 전략과 마케팅 구조를 함께 해석하는 콘텐츠/편성 전략 분석가다.
 
 목표: 입력된 배우들의 다차원 화제성 등급 정보를 바탕으로, 개별 배우의 단순 나열이 아니라 "배우 조합 구조"를 분석해 캐스팅 관점에서의 강점, 보완점, 시너지 구조를 실무형 코멘트로 정리한다.
@@ -1466,21 +1466,17 @@ def load_actor_combo_prompt() -> str:
 
 def get_gemini_keys() -> List[str]:
     keys = []
-
     try:
-        if "chatbot" in st.secrets:
-            chatbot_cfg = st.secrets["chatbot"]
-            api_keys = chatbot_cfg.get("api_keys", {})
-            gemini_keys = api_keys.get("gemini", [])
-            keys.extend([str(k).strip() for k in gemini_keys if str(k).strip()])
+        chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
+        api_keys = chatbot_cfg.get("api_keys", {}) if isinstance(chatbot_cfg, dict) else {}
+        if isinstance(api_keys, dict):
+            keys.extend([str(k).strip() for k in api_keys.get("gemini", []) or [] if str(k).strip()])
     except Exception:
         pass
-
     try:
         keys.extend([str(k).strip() for k in st.secrets.get("GEMINI_API_KEYS", []) or [] if str(k).strip()])
     except Exception:
         pass
-
     dedup = []
     for key in keys:
         if key and key not in dedup:
@@ -1642,7 +1638,7 @@ def build_actor_combo_payload(raw_df: pd.DataFrame, result_df: pd.DataFrame, mai
     return "\n".join([s for s in sections if s is not None]).strip(), selected_df
 
 
-def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
+def call_actor_combo_ai(system_instruction: str, user_payload: str, use_grounding: bool = False) -> str:
     keys = get_gemini_keys()
     if not keys:
         return "<div class='actor-combo-box'>Gemini API Key가 설정되지 않았습니다.</div>"
@@ -1663,6 +1659,7 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
         pass
 
     last_error = None
+    grounding_last_error = None
     for key in keys:
         try:
             genai.configure(api_key=key)
@@ -1671,11 +1668,21 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
                 generation_config={"temperature": 0.2, "max_output_tokens": 4096},
                 system_instruction=system_instruction,
             )
-            resp = model.generate_content(
-                user_payload,
-                request_options={"timeout": 180},
-                safety_settings=safety_settings,
-            )
+            gen_kwargs = {
+                "request_options": {"timeout": 180},
+                "safety_settings": safety_settings,
+            }
+            if use_grounding:
+                gen_kwargs["tools"] = "google_search_retrieval"
+            try:
+                resp = model.generate_content(user_payload, **gen_kwargs)
+            except TypeError as tool_err:
+                if use_grounding:
+                    grounding_last_error = tool_err
+                    gen_kwargs.pop("tools", None)
+                    resp = model.generate_content(user_payload, **gen_kwargs)
+                else:
+                    raise
             if getattr(resp, "text", None):
                 return resp.text
             if c0 := (getattr(resp, "candidates", None) or [None])[0]:
@@ -1685,8 +1692,13 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
             return "<div class='actor-combo-box'>AI 응답이 비어 있습니다.</div>"
         except Exception as e:
             last_error = e
+            if use_grounding and any(token in str(e).lower() for token in ["tool", "search", "ground", "retrieval"]):
+                grounding_last_error = e
             if "429" in str(e) or "quota" in str(e).lower():
                 continue
+
+    if grounding_last_error and not last_error:
+        last_error = grounding_last_error
     msg = str(last_error) if last_error else "알 수 없는 오류"
     return f"<div class='actor-combo-box'>AI 분석 중 오류가 발생했습니다.<br>{msg}</div>"
 
@@ -1719,6 +1731,15 @@ def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
             key="actor_combo_sub",
         )
 
+    use_grounding = st.checkbox(
+        "웹정보 보강모드 사용",
+        value=False,
+        help="Google Search grounding을 보조적으로 사용합니다. 조합 판단의 1차 기준은 현재 입력된 등급/전작 구조입니다.",
+        key="actor_combo_grounding",
+    )
+    if use_grounding:
+        st.caption("웹정보 보강모드 ON · 현재 지표/전작 구조를 우선 해석하고, 웹정보는 최신성 및 맥락 보강용으로만 참고합니다.")
+
     selected_names = main_names + sub_names
     if len(selected_names) != len(set(selected_names)):
         st.warning("동일 배우는 메인/서브에 중복 선택할 수 없습니다.")
@@ -1750,7 +1771,15 @@ def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
             st.warning("선택 배우 데이터를 찾지 못했습니다.")
             return
         with st.spinner("배우 조합을 분석하는 중입니다..."):
-            html = call_actor_combo_ai(prompt, payload)
+            if use_grounding:
+                payload += (
+                    "\n\n[웹정보 보강모드]\n"
+                    "- Google Search grounding이 활성화되어 있음.\n"
+                    "- 다만 판단의 1차 기준은 현재 입력된 등급 구조, 상대위치, 전작요약이다.\n"
+                    "- 웹정보는 최신성 보강, 맥락 확인, 명백한 해석 오류 방지용 보조 근거로만 활용할 것.\n"
+                    "- 웹정보가 지표 구조와 어긋날 경우 지표 기반 구조 해석을 우선하고, 웹정보는 보조 논점으로 제한할 것."
+                )
+            html = call_actor_combo_ai(prompt, payload, use_grounding=use_grounding)
         st.markdown(html, unsafe_allow_html=True)
         with st.expander("Gemini 전달 데이터 보기"):
             st.code(payload, language="text")
