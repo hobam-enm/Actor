@@ -4,3 +4,4 @@ numpy>=1.26
 plotly>=5.24
 gspread>=6.1
 google-auth>=2.35
+google-generativeai
