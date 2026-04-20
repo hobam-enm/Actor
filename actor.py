@@ -1655,7 +1655,9 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
         HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
     }
 
-    model_name = "gemini-3-flash-preview"
+    model_name = "gemini-3-flash-preview",
+    tools='google_search_retrieval'
+
     try:
         chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
         model_name = str(chatbot_cfg.get("gemini_model") or model_name)
