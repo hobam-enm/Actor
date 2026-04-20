@@ -1,17 +1,11 @@
-import json
 import math
 import re
 import textwrap
 from functools import lru_cache
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Tuple
 
-try:
-    from google import genai
-    from google.genai import types
-except Exception:
-    genai = None
-    types = None
+import google.generativeai as genai
 
 import gspread
 import numpy as np
@@ -74,7 +68,7 @@ ACTOR_META_REQUIRED_COLUMNS = ["배우명", "남녀", "출생연도"]
 AGE_GROUP_ORDER = ["20대", "30대", "40대", "50대"]
 CURRENT_YEAR = 2026
 
-ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_onecall_grounding.md"
+ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_advanced.md"
 DEFAULT_ACTOR_COMBO_PROMPT = r"""역할: 너는 드라마 캐스팅 전략과 마케팅 구조를 함께 해석하는 콘텐츠/편성 전략 분석가다.
 
 목표: 입력된 배우들의 다차원 화제성 등급 정보를 바탕으로, 개별 배우의 단순 나열이 아니라 "배우 조합 구조"를 분석해 캐스팅 관점에서의 강점, 보완점, 시너지 구조를 실무형 코멘트로 정리한다.
@@ -1494,16 +1488,6 @@ def get_gemini_keys() -> List[str]:
     return dedup
 
 
-def get_gemini_model_name() -> str:
-    model_name = "gemini-3.1-flash"
-    try:
-        chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
-        model_name = str(chatbot_cfg.get("gemini_model") or model_name)
-    except Exception:
-        pass
-    return model_name
-
-
 def grade_rank_value(grade: str) -> int:
     try:
         return GRADE_ORDER.index(str(grade))
@@ -1620,13 +1604,7 @@ def build_actor_group_payload(raw_df: pd.DataFrame, group_df: pd.DataFrame, labe
     return "\n".join(lines)
 
 
-def build_actor_combo_payload(
-    raw_df: pd.DataFrame,
-    result_df: pd.DataFrame,
-    main_names: List[str],
-    sub_names: List[str],
-    web_mode_enabled: bool = False,
-) -> Tuple[str, pd.DataFrame]:
+def build_actor_combo_payload(raw_df: pd.DataFrame, result_df: pd.DataFrame, main_names: List[str], sub_names: List[str]) -> Tuple[str, pd.DataFrame]:
     selected_names = [name for name in main_names + sub_names if name]
     selected_df = result_df[result_df["배우"].isin(selected_names)].copy()
     if selected_df.empty:
@@ -1646,25 +1624,9 @@ def build_actor_combo_payload(
         f"- 총 선택 배우 수: {len(selected_df)}명",
         f"- 메인 배우 수: {len(main_df)}명",
         f"- 서브 배우 수: {len(sub_df)}명",
-    ]
-
-    if web_mode_enabled:
-        sections.extend([
-            "",
-            "[웹검색 결과 포함 모드]",
-            "- 이번 요청에서는 모델이 웹검색 결과를 직접 참고해 최근 이슈를 함께 반영할 수 있다.",
-            "- 등급·백분율·조합 구조를 기준으로 한 분석이 항상 우선이다.",
-            "- 웹 이슈는 보조 변수로만 반영하고, 등급 기반 해석을 뒤집는 근거로 사용하지 말 것.",
-            "- 웹 이슈가 있을 경우 캐스팅/마케팅 운용 포인트나 리스크 보정 관점에서만 제한적으로 반영할 것.",
-            "- 최근작 공개, 차기작 확정, 인터뷰, 제작발표, 화보 공개 같은 일반적인 홍보성 노출은 기본적으로 제외할 것.",
-            "- 논란, 법적/세무 이슈, 평판 리스크, 수상, 흥행 급상승, 화제성 급등, 캐스팅 판단에 영향을 줄 대중 반응 변화가 있으면 우선 반영할 것.",
-            "- 웹검색으로 뚜렷한 이슈가 없으면 억지로 만들지 말고, 주요 이슈 없음으로 처리할 것.",
-        ])
-
-    sections.extend([
         "",
         build_actor_group_payload(raw_df, main_df, f"메인 {len(main_df)}인", "메인 배우는 원래 상위 티어급에서 주로 구성되므로, 같은 Top 안에서도 Top-A와 Top-C 차이를 분명히 읽어야 함. 동시에 전작 흐름상 실제 파급력 패턴이 반복되는지도 함께 볼 것."),
-    ])
+    ]
     if not sub_df.empty:
         sections.extend([
             "",
@@ -1680,187 +1642,53 @@ def build_actor_combo_payload(
     return "\n".join([s for s in sections if s is not None]).strip(), selected_df
 
 
-def _extract_response_text(resp) -> str:
-    if getattr(resp, "text", None):
-        return str(resp.text)
-    candidates = getattr(resp, "candidates", None) or []
-    for cand in candidates:
-        content = getattr(cand, "content", None)
-        parts = getattr(content, "parts", None) or []
-        texts = []
-        for part in parts:
-            if hasattr(part, "text") and getattr(part, "text"):
-                texts.append(str(part.text))
-        if texts:
-            return "\n".join(texts)
-    return ""
-
-
-def _try_parse_json_object(text: str) -> Dict:
-    raw = (text or "").strip()
-    if not raw:
-        return {}
-    try:
-        return json.loads(raw)
-    except Exception:
-        pass
-    start = raw.find("{")
-    end = raw.rfind("}")
-    if start != -1 and end != -1 and start < end:
-        try:
-            return json.loads(raw[start:end + 1])
-        except Exception:
-            return {}
-    return {}
-
-
-def extract_issue_block_from_html(html: str) -> List[Dict]:
-    if not html:
-        return []
-
-    block_match = re.search(
-        r'<div class="combo-section issues">([\s\S]*?)</div>\s*(?=<div class="combo-section|</div>\s*</div>)',
-        html,
-        flags=re.IGNORECASE,
-    )
-    if not block_match:
-        return []
-
-    block = block_match.group(1)
-    items: List[Dict] = []
-    for li in re.findall(r'<li>([\s\S]*?)</li>', block, flags=re.IGNORECASE):
-        text_only = re.sub(r'<[^>]+>', '', li)
-        text_only = re.sub(r'\s+', ' ', text_only).strip()
-        if not text_only:
-            continue
-
-        actor = ''
-        keywords: List[str] = []
-        summary = text_only
-
-        if ':' in text_only:
-            left, right = text_only.split(':', 1)
-            actor = left.strip()
-            summary = right.strip()
-        elif ' - ' in text_only:
-            left, right = text_only.split(' - ', 1)
-            actor = left.strip()
-            summary = right.strip()
-
-        keyword_part = summary
-        if '|' in summary:
-            keyword_part = summary.split('|', 1)[0].strip()
-        elif ' - ' in summary:
-            keyword_part = summary.split(' - ', 1)[0].strip()
-        elif ',' in summary:
-            keyword_part = summary.split(',', 1)[0].strip()
-
-        raw_keywords = [k.strip() for k in re.split(r'[·,/]|\|', keyword_part) if k.strip()]
-        if raw_keywords:
-            keywords = raw_keywords[:2]
-
-        items.append({
-            "actor": actor or "배우",
-            "keywords": keywords,
-            "summary": summary,
-        })
-    return items
-
-
-def call_genai_text(
-    system_instruction: str,
-    user_payload: str,
-    *,
-    use_google_search: bool = False,
-    response_mime_type: Optional[str] = None,
-    temperature: float = 0.2,
-    max_output_tokens: int = 4096,
-) -> str:
+def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
     keys = get_gemini_keys()
     if not keys:
-        return ""
-    if genai is None or types is None:
-        return ""
+        return "<div class='actor-combo-box'>Gemini API Key가 설정되지 않았습니다.</div>"
 
-    model_name = get_gemini_model_name()
+    from google.generativeai.types import HarmBlockThreshold, HarmCategory
+    safety_settings = {
+        HarmCategory.HARM_CATEGORY_HARASSMENT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_HATE_SPEECH: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+        HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    }
+
+    model_name = "gemini-3-flash-preview"
+    try:
+        chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
+        model_name = str(chatbot_cfg.get("gemini_model") or model_name)
+    except Exception:
+        pass
+
     last_error = None
     for key in keys:
-        client = None
         try:
-            client = genai.Client(api_key=key)
-            tools = [types.Tool(google_search=types.GoogleSearch())] if use_google_search else None
-            config_kwargs = {
-                "system_instruction": system_instruction,
-                "temperature": temperature,
-                "max_output_tokens": max_output_tokens,
-            }
-            if tools:
-                config_kwargs["tools"] = tools
-            if response_mime_type:
-                config_kwargs["response_mime_type"] = response_mime_type
-
-            resp = client.models.generate_content(
-                model=model_name,
-                contents=user_payload,
-                config=types.GenerateContentConfig(**config_kwargs),
+            genai.configure(api_key=key)
+            model = genai.GenerativeModel(
+                model_name,
+                generation_config={"temperature": 0.2, "max_output_tokens": 4096},
+                system_instruction=system_instruction,
             )
-            text = _extract_response_text(resp)
-            if text.strip():
-                return text
-            last_error = RuntimeError("AI 응답이 비어 있습니다.")
+            resp = model.generate_content(
+                user_payload,
+                request_options={"timeout": 180},
+                safety_settings=safety_settings,
+            )
+            if getattr(resp, "text", None):
+                return resp.text
+            if c0 := (getattr(resp, "candidates", None) or [None])[0]:
+                if p0 := (getattr(c0, "content", None) and getattr(c0.content, "parts", None) or [None])[0]:
+                    if hasattr(p0, "text"):
+                        return p0.text
+            return "<div class='actor-combo-box'>AI 응답이 비어 있습니다.</div>"
         except Exception as e:
             last_error = e
             if "429" in str(e) or "quota" in str(e).lower():
                 continue
-        finally:
-            if client is not None:
-                try:
-                    client.close()
-                except Exception:
-                    pass
-    return f"__ERROR__::{last_error}" if last_error else ""
-
-
-def call_actor_combo_ai(system_instruction: str, user_payload: str, *, use_google_search: bool = False) -> str:
-    if genai is None or types is None:
-        return "<div class='actor-combo-box'>google-genai 패키지가 설치되지 않았습니다. requirements에 google-genai를 추가해주세요.</div>"
-    html = call_genai_text(system_instruction, user_payload, use_google_search=use_google_search)
-    if html.startswith("__ERROR__::"):
-        msg = html.split("::", 1)[1]
-        return f"<div class='actor-combo-box'>AI 분석 중 오류가 발생했습니다.<br>{msg}</div>"
-    if not html.strip():
-        return "<div class='actor-combo-box'>AI 응답이 비어 있습니다.</div>"
-    return html
-
-
-def render_issue_summary(issue_items: List[Dict]):
-    if not issue_items:
-        return
-
-    lines = []
-    for item in issue_items:
-        actor = item.get("actor", "")
-        keywords = item.get("keywords") or []
-        summary = item.get("summary") or ""
-        keyword_text = ", ".join(keywords) if keywords else "키워드 없음"
-
-        summary_html = (
-            f"<div style='font-size:0.83rem; color:#6b7280; margin-top:5px; line-height:1.65;'>{summary}</div>"
-            if summary else ""
-        )
-
-        lines.append(
-            f"<div style='padding:10px 0; border-bottom:1px solid #edf1f7;'>"
-            f"<div style='font-size:0.95rem; font-weight:900; color:#111827;'>주요 이슈 · {actor}</div>"
-            f"<div style='font-size:0.86rem; color:#334155; margin-top:4px;'>키워드: {keyword_text}</div>"
-            f"{summary_html}"
-            f"</div>"
-        )
-
-    st.markdown(
-        f"<div class='actor-combo-box'><div class='rep-title'>최근 웹검색 주요 이슈</div>{''.join(lines)}</div>",
-        unsafe_allow_html=True,
-    )
+    msg = str(last_error) if last_error else "알 수 없는 오류"
+    return f"<div class='actor-combo-box'>AI 분석 중 오류가 발생했습니다.<br>{msg}</div>"
 
 
 def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
@@ -1891,15 +1719,6 @@ def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
             key="actor_combo_sub",
         )
 
-    web_mode_enabled = st.toggle(
-        "웹검색 결과 포함 모드",
-        value=False,
-        help="최근 웹검색 기반 이슈를 보조적으로 반영합니다. 등급 기반 조합 해석이 항상 우선입니다.",
-        key="actor_combo_web_mode",
-    )
-    if web_mode_enabled:
-        st.caption("최근 웹검색 기반 이슈를 함께 반영합니다. 해석 우선순위는 등급·백분율·조합 구조입니다.")
-
     selected_names = main_names + sub_names
     if len(selected_names) != len(set(selected_names)):
         st.warning("동일 배우는 메인/서브에 중복 선택할 수 없습니다.")
@@ -1926,25 +1745,17 @@ def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
     if st.button("AI 조합 분석 시작", type="primary", use_container_width=True):
         prompt = load_actor_combo_prompt()
+        payload, payload_df = build_actor_combo_payload(raw_df, result_df, main_names, sub_names)
+        if payload_df.empty:
+            st.warning("선택 배우 데이터를 찾지 못했습니다.")
+            return
         with st.spinner("배우 조합을 분석하는 중입니다..."):
-            payload, payload_df = build_actor_combo_payload(
-                raw_df,
-                result_df,
-                main_names,
-                sub_names,
-                web_mode_enabled=web_mode_enabled,
-            )
-            if payload_df.empty:
-                st.warning("선택 배우 데이터를 찾지 못했습니다.")
-                return
-            html = call_actor_combo_ai(prompt, payload, use_google_search=web_mode_enabled)
-            issue_items = extract_issue_block_from_html(html) if web_mode_enabled else []
-
-        if web_mode_enabled:
-            render_issue_summary(issue_items)
+            html = call_actor_combo_ai(prompt, payload)
         st.markdown(html, unsafe_allow_html=True)
         with st.expander("Gemini 전달 데이터 보기"):
             st.code(payload, language="text")
+
+
 
 def main():
     inject_css()
