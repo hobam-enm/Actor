@@ -1729,6 +1729,34 @@ def _try_parse_json_object(text: str) -> Dict:
     return {}
 
 
+def _coerce_issues_list(parsed) -> List[Dict]:
+    if not isinstance(parsed, dict):
+        return []
+
+    items = parsed.get("issues")
+
+    if isinstance(items, list):
+        return [x for x in items if isinstance(x, dict)]
+
+    if isinstance(items, dict):
+        return [items]
+
+    if isinstance(items, str):
+        text = items.strip()
+        if not text:
+            return []
+        try:
+            obj = json.loads(text)
+            if isinstance(obj, list):
+                return [x for x in obj if isinstance(x, dict)]
+            if isinstance(obj, dict):
+                return [obj]
+        except Exception:
+            return []
+
+    return []
+
+
 def call_genai_text(
     system_instruction: str,
     user_payload: str,
@@ -1877,9 +1905,9 @@ def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[
             st.code(raw, language="json")
         return []
 
-    items = parsed.get("issues")
-    if not isinstance(items, list):
-        st.warning("웹검색 이슈 추출 실패: JSON 형식은 맞지만 issues 배열이 없습니다.")
+    items = _coerce_issues_list(parsed)
+    if not items:
+        st.warning("웹검색 응답은 받았지만 issues 구조를 안정적으로 해석하지 못했습니다.")
         with st.expander("웹검색 원본 응답 보기"):
             st.code(raw, language="json")
         return []
