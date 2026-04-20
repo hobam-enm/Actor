@@ -1797,7 +1797,17 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
 
 def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[Dict]:
     names = [str(name).strip() for name in actor_names if str(name).strip()]
-    if not names or genai is None or types is None:
+    if not names:
+        st.info("웹검색 이슈 추출 대상 배우가 없습니다.")
+        return []
+
+    if genai is None or types is None:
+        st.warning("웹검색 이슈 추출 비활성화: google-genai 패키지가 설치되지 않았거나 import에 실패했습니다.")
+        return []
+
+    keys = get_gemini_keys()
+    if not keys:
+        st.warning("웹검색 이슈 추출 비활성화: Gemini API Key가 설정되지 않았습니다.")
         return []
 
     system_instruction = textwrap.dedent(
@@ -1813,6 +1823,7 @@ def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[
         {"issues":[{"actor":"배우명","tone":"positive|negative|mixed|neutral","keywords":["키워드1","키워드2"],"summary":"한 줄 요약"}]}
         6. 이슈가 없으면 {"issues":[]} 로 반환한다.
         7. keywords는 최대 2개까지만 넣는다.
+        8. actor 값은 반드시 입력된 배우명과 동일한 표기로 쓴다.
         """
     ).strip()
 
@@ -1837,35 +1848,80 @@ def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[
         temperature=0.1,
         max_output_tokens=1200,
     )
-    if not raw or raw.startswith("__ERROR__::"):
+
+    if not raw:
+        st.warning("웹검색 이슈 추출 실패: AI 응답이 비어 있습니다.")
+        return []
+
+    if raw.startswith("__ERROR__::"):
+        msg = raw.split("::", 1)[1].strip()
+        st.warning(f"웹검색 이슈 추출 실패: {msg}")
         return []
 
     parsed = _try_parse_json_object(raw)
-    items = parsed.get("issues") if isinstance(parsed, dict) else None
-    if not isinstance(items, list):
+    if not isinstance(parsed, dict):
+        st.warning("웹검색 이슈 추출 실패: JSON 파싱에 실패했습니다.")
+        with st.expander("웹검색 원본 응답 보기"):
+            st.code(raw, language="json")
         return []
+
+    items = parsed.get("issues")
+    if not isinstance(items, list):
+        st.warning("웹검색 이슈 추출 실패: JSON 형식은 맞지만 issues 배열이 없습니다.")
+        with st.expander("웹검색 원본 응답 보기"):
+            st.code(raw, language="json")
+        return []
+
+    normalized_name_map = {}
+    for name in names:
+        key = re.sub(r"\s+", "", name)
+        normalized_name_map[key] = name
 
     cleaned = []
     seen = set()
+
     for item in items:
         if not isinstance(item, dict):
             continue
-        actor = str(item.get("actor") or "").strip()
-        if not actor or actor not in names or actor in seen:
+
+        actor_raw = str(item.get("actor") or "").strip()
+        if not actor_raw:
             continue
+
+        actor_key = re.sub(r"\s+", "", actor_raw)
+        actor = normalized_name_map.get(actor_key)
+
+        if not actor:
+            for original_key, original_name in normalized_name_map.items():
+                if actor_key in original_key or original_key in actor_key:
+                    actor = original_name
+                    break
+
+        if not actor or actor in seen:
+            continue
+
         seen.add(actor)
+
         keywords = item.get("keywords") or []
         keywords = [str(k).strip() for k in keywords if str(k).strip()][:2]
+
         summary = str(item.get("summary") or "").strip()
         tone = str(item.get("tone") or "neutral").strip().lower()
         if tone not in {"positive", "negative", "mixed", "neutral"}:
             tone = "neutral"
+
         cleaned.append({
             "actor": actor,
             "tone": tone,
             "keywords": keywords,
             "summary": summary,
         })
+
+    if not cleaned:
+        st.info("웹검색은 수행됐지만, 선택 배우명과 매칭되는 최근 주요 이슈가 정리되지 않았습니다.")
+        with st.expander("웹검색 원본 응답 보기"):
+            st.code(raw, language="json")
+
     return cleaned
 
 
