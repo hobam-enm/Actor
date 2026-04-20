@@ -1656,7 +1656,6 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
     }
 
     model_name = "gemini-3-flash-preview",
-    tools='google_search_retrieval'
 
     try:
         chatbot_cfg = dict(st.secrets.get("chatbot", {})) if "chatbot" in st.secrets else {}
