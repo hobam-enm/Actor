@@ -74,7 +74,7 @@ ACTOR_META_REQUIRED_COLUMNS = ["배우명", "남녀", "출생연도"]
 AGE_GROUP_ORDER = ["20대", "30대", "40대", "50대"]
 CURRENT_YEAR = 2026
 
-ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_final.md"
+ACTOR_COMBO_PROMPT_FILE = "actor_combo_prompt_onecall_grounding.md"
 DEFAULT_ACTOR_COMBO_PROMPT = r"""역할: 너는 드라마 캐스팅 전략과 마케팅 구조를 함께 해석하는 콘텐츠/편성 전략 분석가다.
 
 목표: 입력된 배우들의 다차원 화제성 등급 정보를 바탕으로, 개별 배우의 단순 나열이 아니라 "배우 조합 구조"를 분석해 캐스팅 관점에서의 강점, 보완점, 시너지 구조를 실무형 코멘트로 정리한다.
@@ -1625,7 +1625,6 @@ def build_actor_combo_payload(
     result_df: pd.DataFrame,
     main_names: List[str],
     sub_names: List[str],
-    issue_items: Optional[List[Dict]] = None,
     web_mode_enabled: bool = False,
 ) -> Tuple[str, pd.DataFrame]:
     selected_names = [name for name in main_names + sub_names if name]
@@ -1653,28 +1652,14 @@ def build_actor_combo_payload(
         sections.extend([
             "",
             "[웹검색 결과 포함 모드]",
-            "- 최근 웹검색 기반 이슈 참고 정보가 함께 제공됨.",
+            "- 이번 요청에서는 모델이 웹검색 결과를 직접 참고해 최근 이슈를 함께 반영할 수 있다.",
             "- 등급·백분율·조합 구조를 기준으로 한 분석이 항상 우선이다.",
             "- 웹 이슈는 보조 변수로만 반영하고, 등급 기반 해석을 뒤집는 근거로 사용하지 말 것.",
             "- 웹 이슈가 있을 경우 캐스팅/마케팅 운용 포인트나 리스크 보정 관점에서만 제한적으로 반영할 것.",
+            "- 최근작 공개, 차기작 확정, 인터뷰, 제작발표, 화보 공개 같은 일반적인 홍보성 노출은 기본적으로 제외할 것.",
+            "- 논란, 법적/세무 이슈, 평판 리스크, 수상, 흥행 급상승, 화제성 급등, 캐스팅 판단에 영향을 줄 대중 반응 변화가 있으면 우선 반영할 것.",
+            "- 웹검색으로 뚜렷한 이슈가 없으면 억지로 만들지 말고, 주요 이슈 없음으로 처리할 것.",
         ])
-        if issue_items:
-            sections.extend(["", "[최근 웹검색 주요 이슈]"])
-            for item in issue_items:
-                actor = str(item.get("actor") or "").strip()
-                tone = str(item.get("tone") or "중립").strip() or "중립"
-                keywords = item.get("keywords") or []
-                summary = str(item.get("summary") or "").strip()
-                keyword_text = ", ".join([str(k).strip() for k in keywords if str(k).strip()]) or "키워드 없음"
-                sections.append(f"- {actor} | 톤 {tone} | 키워드 {keyword_text}")
-                if summary:
-                    sections.append(f"  · 요약: {summary}")
-        else:
-            sections.extend([
-                "",
-                "[최근 웹검색 주요 이슈]",
-                "- 선택 배우 기준으로 해석에 반영할 만한 뚜렷한 최근 이슈를 찾지 못했음.",
-            ])
 
     sections.extend([
         "",
@@ -1719,67 +1704,67 @@ def _try_parse_json_object(text: str) -> Dict:
         return json.loads(raw)
     except Exception:
         pass
-
     start = raw.find("{")
     end = raw.rfind("}")
     if start != -1 and end != -1 and start < end:
-        candidate = raw[start:end + 1]
         try:
-            return json.loads(candidate)
+            return json.loads(raw[start:end + 1])
         except Exception:
-            pass
-
+            return {}
     return {}
 
 
-def _coerce_issues_list(parsed) -> List[Dict]:
-    if not isinstance(parsed, dict):
+def extract_issue_block_from_html(html: str) -> List[Dict]:
+    if not html:
         return []
 
-    items = parsed.get("issues")
+    block_match = re.search(
+        r'<div class="combo-section issues">([\s\S]*?)</div>\s*(?=<div class="combo-section|</div>\s*</div>)',
+        html,
+        flags=re.IGNORECASE,
+    )
+    if not block_match:
+        return []
 
-    if isinstance(items, list):
-        return [x for x in items if isinstance(x, dict)]
+    block = block_match.group(1)
+    items: List[Dict] = []
+    for li in re.findall(r'<li>([\s\S]*?)</li>', block, flags=re.IGNORECASE):
+        text_only = re.sub(r'<[^>]+>', '', li)
+        text_only = re.sub(r'\s+', ' ', text_only).strip()
+        if not text_only:
+            continue
 
-    if isinstance(items, dict):
-        return [items]
+        actor = ''
+        keywords: List[str] = []
+        summary = text_only
 
-    if isinstance(items, str):
-        text = items.strip()
-        if not text:
-            return []
-        try:
-            obj = json.loads(text)
-            if isinstance(obj, list):
-                return [x for x in obj if isinstance(x, dict)]
-            if isinstance(obj, dict):
-                return [obj]
-        except Exception:
-            return []
+        if ':' in text_only:
+            left, right = text_only.split(':', 1)
+            actor = left.strip()
+            summary = right.strip()
+        elif ' - ' in text_only:
+            left, right = text_only.split(' - ', 1)
+            actor = left.strip()
+            summary = right.strip()
 
-    return []
+        keyword_part = summary
+        if '|' in summary:
+            keyword_part = summary.split('|', 1)[0].strip()
+        elif ' - ' in summary:
+            keyword_part = summary.split(' - ', 1)[0].strip()
+        elif ',' in summary:
+            keyword_part = summary.split(',', 1)[0].strip()
 
+        raw_keywords = [k.strip() for k in re.split(r'[·,/]|\|', keyword_part) if k.strip()]
+        if raw_keywords:
+            keywords = raw_keywords[:2]
 
-def _is_likely_truncated_issue_response(raw: str) -> bool:
-    text = (raw or "").strip()
-    if not text:
-        return False
-    if '"issues"' not in text:
-        return False
-
-    opens = {
-        "{": text.count("{"),
-        "}": text.count("}"),
-        "[": text.count("["),
-        "]": text.count("]"),
-    }
-    if opens["{"] != opens["}"] or opens["["] != opens["]"]:
-        return True
-
-    if text.endswith(",") or text.endswith('["') or text.endswith('"') and not text.endswith('"}') and not text.endswith('"]}') and not text.endswith('"}]}'):
-        return True
-
-    return False
+        items.append({
+            "actor": actor or "배우",
+            "keywords": keywords,
+            "summary": summary,
+        })
+    return items
 
 
 def call_genai_text(
@@ -1836,10 +1821,10 @@ def call_genai_text(
     return f"__ERROR__::{last_error}" if last_error else ""
 
 
-def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
+def call_actor_combo_ai(system_instruction: str, user_payload: str, *, use_google_search: bool = False) -> str:
     if genai is None or types is None:
         return "<div class='actor-combo-box'>google-genai 패키지가 설치되지 않았습니다. requirements에 google-genai를 추가해주세요.</div>"
-    html = call_genai_text(system_instruction, user_payload, use_google_search=False)
+    html = call_genai_text(system_instruction, user_payload, use_google_search=use_google_search)
     if html.startswith("__ERROR__::"):
         msg = html.split("::", 1)[1]
         return f"<div class='actor-combo-box'>AI 분석 중 오류가 발생했습니다.<br>{msg}</div>"
@@ -1848,170 +1833,8 @@ def call_actor_combo_ai(system_instruction: str, user_payload: str) -> str:
     return html
 
 
-def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[Dict]:
-    names = [str(name).strip() for name in actor_names if str(name).strip()]
-    if not names:
-        st.info("웹검색 이슈 추출 대상 배우가 없습니다.")
-        return []
-
-    if genai is None or types is None:
-        st.warning("웹검색 이슈 추출 비활성화: google-genai 패키지가 설치되지 않았거나 import에 실패했습니다.")
-        return []
-
-    keys = get_gemini_keys()
-    if not keys:
-        st.warning("웹검색 이슈 추출 비활성화: Gemini API Key가 설정되지 않았습니다.")
-        return []
-
-    system_instruction = textwrap.dedent(
-        """
-        역할: 너는 최신 웹검색 결과를 바탕으로 배우별 최근 주요 이슈를 매우 짧게 정리하는 리서치 보조 분석가다.
-
-        규칙:
-        1. 최근 웹검색 결과에 근거해, 실제로 최근 이슈성이 확인되는 배우만 골라라.
-        2. 긍정/부정/중립/혼합 이슈 모두 가능하지만, 루머성·확인불가 내용은 제외한다.
-        3. 이 단계에서는 평가하지 말고, 최근 이슈 키워드와 짧은 요약만 정리한다.
-        4. 결과는 JSON만 출력한다.
-        5. 형식은 다음과 같다:
-        {"issues":[{"actor":"배우명","tone":"positive|negative|mixed|neutral","keywords":["키워드1","키워드2"],"summary":"한 줄 요약"}]}
-        6. 이슈가 없으면 {"issues":[]} 로 반환한다.
-        7. keywords는 최대 2개까지만 넣는다.
-        8. actor 값은 반드시 입력된 배우명과 동일한 표기로 쓴다.
-        9. 최근작 공개, 차기작 확정, 인터뷰, 제작발표, 화보 공개 같은 일반적인 홍보성 노출은 기본적으로 제외한다.
-        10. 아래와 같은 경우에만 주요 이슈로 채택한다:
-           - 논란, 법적 이슈, 세무 이슈, 평판 리스크
-           - 수상, 흥행 급상승, 화제성 급등 등 위상 변화
-           - 캐스팅 판단에 실질적 영향을 줄 수 있는 대중 반응 변화
-        11. 작품명이 언급되더라도, 그것이 단순 출연 소식인지 아닌지를 먼저 판단하라.
-        12. 단순 신작 공개, 출연 확정, 홍보성 인터뷰는 주요 이슈로 보지 않는다.
-        13. 논란·평판 변화·리스크 이슈가 확인되면 일반 작품 홍보성 기사보다 그것을 우선 채택한다.
-        14. 여러 후보가 보이면, ‘최근 많이 언급된 것’보다 ‘캐스팅 판단에 영향을 주는 것’을 우선한다.
-        15. 응답은 반드시 완결된 단일 JSON 객체여야 하며, 미완성 JSON을 출력하지 않는다.
-        """
-    ).strip()
-
-    user_payload = textwrap.dedent(
-        f"""
-        아래 배우들에 대해 최근 {days}일 내 웹검색 기준으로 해석에 참고할 만한 주요 이슈가 있는지 확인해라.
-        배우 목록: {', '.join(names)}
-
-        주의:
-        - 배우 관련 최근 뉴스 중, 캐스팅 리스크나 기대치 변화에 영향을 줄 수 있는 내용만 고른다.
-        - 단순 차기작 공개, 출연 확정, 인터뷰, 제작발표, 화보, 일반 홍보성 기사 내용은 제외한다.
-        - 논란, 법적/세무 이슈, 수상, 흥행 급상승, 여론 변화, 평판 변화가 있으면 그것을 우선한다.
-        - 작품명이 언급되더라도 단순 출연 소식이면 제외한다.
-        - 단순 프로필성 정보나 오래된 대표작 설명은 제외한다.
-        - 해석에 의미가 약한 내용은 제외한다.
-        - 배우당 최대 1개 이슈만 반환한다.
-        - keywords는 최대 2개, summary는 한 문장으로 매우 짧게 작성한다.
-        - 출력은 JSON만 한다.
-        """
-    ).strip()
-
-    def _request_once(max_output_tokens: int) -> str:
-        return call_genai_text(
-            system_instruction,
-            user_payload,
-            use_google_search=True,
-            response_mime_type="application/json",
-            temperature=0.1,
-            max_output_tokens=max_output_tokens,
-        )
-
-    raw = _request_once(800)
-
-    if not raw:
-        st.warning("웹검색 이슈 추출 실패: AI 응답이 비어 있습니다.")
-        return []
-
-    if raw.startswith("__ERROR__::"):
-        msg = raw.split("::", 1)[1].strip()
-        st.warning(f"웹검색 이슈 추출 실패: {msg}")
-        return []
-
-    parsed = _try_parse_json_object(raw)
-    items = _coerce_issues_list(parsed)
-
-    retry_raw = None
-    if not items and _is_likely_truncated_issue_response(raw):
-        retry_prompt = user_payload + "\n\n중요: 이전 응답이 잘리지 않도록 반드시 더 짧고 완결된 JSON만 반환하라."
-        retry_raw = call_genai_text(
-            system_instruction,
-            retry_prompt,
-            use_google_search=True,
-            response_mime_type="application/json",
-            temperature=0.0,
-            max_output_tokens=400,
-        )
-        if retry_raw and not retry_raw.startswith("__ERROR__::"):
-            parsed_retry = _try_parse_json_object(retry_raw)
-            retry_items = _coerce_issues_list(parsed_retry)
-            if retry_items:
-                raw = retry_raw
-                items = retry_items
-
-    if not items:
-        st.warning("웹검색 응답은 받았지만 issues 구조를 안정적으로 해석하지 못했습니다.")
-        with st.expander("웹검색 원본 응답 보기"):
-            st.code(retry_raw or raw, language="json")
-        return []
-
-    normalized_name_map = {}
-    for name in names:
-        key = re.sub(r"\s+", "", name)
-        normalized_name_map[key] = name
-
-    cleaned = []
-    seen = set()
-
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-
-        actor_raw = str(item.get("actor") or "").strip()
-        if not actor_raw:
-            continue
-
-        actor_key = re.sub(r"\s+", "", actor_raw)
-        actor = normalized_name_map.get(actor_key)
-
-        if not actor:
-            for original_key, original_name in normalized_name_map.items():
-                if actor_key in original_key or original_key in actor_key:
-                    actor = original_name
-                    break
-
-        if not actor or actor in seen:
-            continue
-
-        seen.add(actor)
-
-        keywords = item.get("keywords") or []
-        keywords = [str(k).strip() for k in keywords if str(k).strip()][:2]
-
-        summary = str(item.get("summary") or "").strip()
-        tone = str(item.get("tone") or "neutral").strip().lower()
-        if tone not in {"positive", "negative", "mixed", "neutral"}:
-            tone = "neutral"
-
-        cleaned.append({
-            "actor": actor,
-            "tone": tone,
-            "keywords": keywords,
-            "summary": summary,
-        })
-
-    if not cleaned:
-        st.info("웹검색은 수행됐지만, 선택 배우명과 매칭되는 최근 주요 이슈가 정리되지 않았습니다.")
-        with st.expander("웹검색 원본 응답 보기"):
-            st.code(retry_raw or raw, language="json")
-
-    return cleaned
-
-
 def render_issue_summary(issue_items: List[Dict]):
     if not issue_items:
-        st.info("최근 웹검색 기준으로 해석에 반영할 만한 주요 이슈를 찾지 못했습니다.")
         return
 
     lines = []
@@ -2103,22 +1926,19 @@ def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
     if st.button("AI 조합 분석 시작", type="primary", use_container_width=True):
         prompt = load_actor_combo_prompt()
-        issue_items: List[Dict] = []
         with st.spinner("배우 조합을 분석하는 중입니다..."):
-            if web_mode_enabled:
-                issue_items = extract_recent_actor_issues(selected_names, days=90)
             payload, payload_df = build_actor_combo_payload(
                 raw_df,
                 result_df,
                 main_names,
                 sub_names,
-                issue_items=issue_items,
                 web_mode_enabled=web_mode_enabled,
             )
             if payload_df.empty:
                 st.warning("선택 배우 데이터를 찾지 못했습니다.")
                 return
-            html = call_actor_combo_ai(prompt, payload)
+            html = call_actor_combo_ai(prompt, payload, use_google_search=web_mode_enabled)
+            issue_items = extract_issue_block_from_html(html) if web_mode_enabled else []
 
         if web_mode_enabled:
             render_issue_summary(issue_items)
