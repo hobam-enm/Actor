@@ -1719,13 +1719,16 @@ def _try_parse_json_object(text: str) -> Dict:
         return json.loads(raw)
     except Exception:
         pass
+
     start = raw.find("{")
     end = raw.rfind("}")
     if start != -1 and end != -1 and start < end:
+        candidate = raw[start:end + 1]
         try:
-            return json.loads(raw[start:end + 1])
+            return json.loads(candidate)
         except Exception:
-            return {}
+            pass
+
     return {}
 
 
@@ -1755,6 +1758,28 @@ def _coerce_issues_list(parsed) -> List[Dict]:
             return []
 
     return []
+
+
+def _is_likely_truncated_issue_response(raw: str) -> bool:
+    text = (raw or "").strip()
+    if not text:
+        return False
+    if '"issues"' not in text:
+        return False
+
+    opens = {
+        "{": text.count("{"),
+        "}": text.count("}"),
+        "[": text.count("["),
+        "]": text.count("]"),
+    }
+    if opens["{"] != opens["}"] or opens["["] != opens["]"]:
+        return True
+
+    if text.endswith(",") or text.endswith('["') or text.endswith('"') and not text.endswith('"}') and not text.endswith('"]}') and not text.endswith('"}]}'):
+        return True
+
+    return False
 
 
 def call_genai_text(
@@ -1861,6 +1886,7 @@ def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[
         12. 단순 신작 공개, 출연 확정, 홍보성 인터뷰는 주요 이슈로 보지 않는다.
         13. 논란·평판 변화·리스크 이슈가 확인되면 일반 작품 홍보성 기사보다 그것을 우선 채택한다.
         14. 여러 후보가 보이면, ‘최근 많이 언급된 것’보다 ‘캐스팅 판단에 영향을 주는 것’을 우선한다.
+        15. 응답은 반드시 완결된 단일 JSON 객체여야 하며, 미완성 JSON을 출력하지 않는다.
         """
     ).strip()
 
@@ -1876,18 +1902,23 @@ def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[
         - 작품명이 언급되더라도 단순 출연 소식이면 제외한다.
         - 단순 프로필성 정보나 오래된 대표작 설명은 제외한다.
         - 해석에 의미가 약한 내용은 제외한다.
+        - 배우당 최대 1개 이슈만 반환한다.
+        - keywords는 최대 2개, summary는 한 문장으로 매우 짧게 작성한다.
         - 출력은 JSON만 한다.
         """
     ).strip()
 
-    raw = call_genai_text(
-        system_instruction,
-        user_payload,
-        use_google_search=True,
-        response_mime_type="application/json",
-        temperature=0.1,
-        max_output_tokens=1200,
-    )
+    def _request_once(max_output_tokens: int) -> str:
+        return call_genai_text(
+            system_instruction,
+            user_payload,
+            use_google_search=True,
+            response_mime_type="application/json",
+            temperature=0.1,
+            max_output_tokens=max_output_tokens,
+        )
+
+    raw = _request_once(800)
 
     if not raw:
         st.warning("웹검색 이슈 추출 실패: AI 응답이 비어 있습니다.")
@@ -1899,17 +1930,30 @@ def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[
         return []
 
     parsed = _try_parse_json_object(raw)
-    if not isinstance(parsed, dict):
-        st.warning("웹검색 이슈 추출 실패: JSON 파싱에 실패했습니다.")
-        with st.expander("웹검색 원본 응답 보기"):
-            st.code(raw, language="json")
-        return []
-
     items = _coerce_issues_list(parsed)
+
+    retry_raw = None
+    if not items and _is_likely_truncated_issue_response(raw):
+        retry_prompt = user_payload + "\n\n중요: 이전 응답이 잘리지 않도록 반드시 더 짧고 완결된 JSON만 반환하라."
+        retry_raw = call_genai_text(
+            system_instruction,
+            retry_prompt,
+            use_google_search=True,
+            response_mime_type="application/json",
+            temperature=0.0,
+            max_output_tokens=400,
+        )
+        if retry_raw and not retry_raw.startswith("__ERROR__::"):
+            parsed_retry = _try_parse_json_object(retry_raw)
+            retry_items = _coerce_issues_list(parsed_retry)
+            if retry_items:
+                raw = retry_raw
+                items = retry_items
+
     if not items:
         st.warning("웹검색 응답은 받았지만 issues 구조를 안정적으로 해석하지 못했습니다.")
         with st.expander("웹검색 원본 응답 보기"):
-            st.code(raw, language="json")
+            st.code(retry_raw or raw, language="json")
         return []
 
     normalized_name_map = {}
@@ -1960,7 +2004,7 @@ def extract_recent_actor_issues(actor_names: List[str], days: int = 90) -> List[
     if not cleaned:
         st.info("웹검색은 수행됐지만, 선택 배우명과 매칭되는 최근 주요 이슈가 정리되지 않았습니다.")
         with st.expander("웹검색 원본 응답 보기"):
-            st.code(raw, language="json")
+            st.code(retry_raw or raw, language="json")
 
     return cleaned
 
