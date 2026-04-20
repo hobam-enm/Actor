@@ -1880,13 +1880,20 @@ def render_issue_summary(issue_items: List[Dict]):
         keywords = item.get("keywords") or []
         summary = item.get("summary") or ""
         keyword_text = ", ".join(keywords) if keywords else "키워드 없음"
+
+        summary_html = (
+            f"<div style='font-size:0.83rem; color:#6b7280; margin-top:5px; line-height:1.65;'>{summary}</div>"
+            if summary else ""
+        )
+
         lines.append(
             f"<div style='padding:10px 0; border-bottom:1px solid #edf1f7;'>"
             f"<div style='font-size:0.95rem; font-weight:900; color:#111827;'>주요 이슈 · {actor}</div>"
             f"<div style='font-size:0.86rem; color:#334155; margin-top:4px;'>키워드: {keyword_text}</div>"
-            f"{f'<div style="font-size:0.83rem; color:#6b7280; margin-top:5px; line-height:1.65;">{summary}</div>' if summary else ''}"
+            f"{summary_html}"
             f"</div>"
         )
+
     st.markdown(
         f"<div class='actor-combo-box'><div class='rep-title'>최근 웹검색 주요 이슈</div>{''.join(lines)}</div>",
         unsafe_allow_html=True,
