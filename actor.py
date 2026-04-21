@@ -632,7 +632,11 @@ def build_result_table(raw_df: pd.DataFrame) -> pd.DataFrame:
     )
     result["대표작 성과백분위"] = percentrank_inc_min(result["대표작 성과"])
     result["최하제외평균백분위"] = percentrank_inc_min(result["최하제외평균"])
-    result["폭발력지수"] = 0.5 * result["대표작 성과백분위"] + 0.5 * result["최하제외평균백분위"]
+    result["폭발력지수"] = np.where(
+        result["출연작품수"] == 1,
+        0.5 * result["대표작 성과백분위"] * 0.75 + 0.5 * result["최하제외평균백분위"],
+        0.5 * result["대표작 성과백분위"] + 0.5 * result["최하제외평균백분위"],
+    )
 
     result["작품평균"] = result["배우화제성"] / result["출연작품수"].replace(0, np.nan)
     global_avg = result["작품평균"].mean()
@@ -1076,7 +1080,9 @@ def render_reference():
 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
 <b>대표작의 고점과 저점 제거 후 대표 퍼포먼스를 함께 반영한 화제성 점화 능력</b>
 <div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0 6px 0;'>
-<b style='color:#0f172a; font-size:1rem;'>폭발력</b> = 폭발력지수의 전체 백분위
+<b style='color:#0f172a; font-size:1rem;'>폭발력</b> = 폭발력지수의 전체 백분위<br><br>
+<b style='color:#0f172a;'>폭발력지수 =</b> 0.5 × 대표작성과백분위 + 0.5 × 최하제외평균백분위<br>
+<span style='color:#475569; font-size:0.88rem;'>단, 출연작품수 1개인 경우에는 대표작 과대평가를 막기 위해 <b>0.5 × 대표작성과백분위 × 0.75 + 0.5 × 최하제외평균백분위</b>를 적용</span>
 </div>
 </div>
 </div>""",
