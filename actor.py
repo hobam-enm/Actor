@@ -743,7 +743,7 @@ def top3_card(rank: int, name: str, tier: str, score: float, subtitle: str = "")
     rank_sizes = {1: "1.18rem", 2: "1.08rem", 3: "1.02rem"}
     st.markdown(
         f"""
-        <div class='tiny-card' style='min-height:132px; padding:16px 16px;'>
+        <div class='tiny-card' style='min-height:148px; padding:18px 18px;'>
             {chip_html(f"{rank}위 · {tier}", tier)}
             <div class='actor-name' style='font-size:{rank_sizes.get(rank, "1rem")}; margin-top:12px;'>{name}</div>
             <div class='actor-sub'>합산점수 {format_score(score)}</div>
@@ -770,7 +770,7 @@ def rank_list_card(rows: pd.DataFrame, start_rank: int = 4):
             f"</div>"
         )
     html = textwrap.dedent(f"""
-    <div class='card' style='padding:10px 18px 8px 18px;'>
+    <div class='card' style='padding:14px 22px 12px 22px; min-height:470px;'>
         {''.join(lines)}
     </div>
     """).strip()
@@ -840,7 +840,7 @@ def render_highlight_rank_section(title: str, sub_df: pd.DataFrame, subtitle_bui
     top_rows = rows.head(3)
     rest_rows = rows.iloc[3:]
 
-    c1, c2 = st.columns([1.15, 1.85] if compact else [1.25, 1.75])
+    c1, c2 = st.columns([1.1, 1.9] if compact else [1.05, 2.15])
 
     with c1:
         for i, (_, r) in enumerate(top_rows.iterrows(), start=1):
@@ -1242,28 +1242,28 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         st.plotly_chart(heatmap_fig, use_container_width=True)
 
     with st.container(border=True):
-        st.markdown("<div class='overview-section-title'>성별 S 10</div>", unsafe_allow_html=True)
+        st.markdown("<div class='overview-section-title'>성별 Top 10</div>", unsafe_allow_html=True)
         gender_left, gender_right = st.columns(2)
         with gender_left:
             render_highlight_rank_section(
-                "남배우 S 10",
+                "남배우 Top 10",
                 result_df[result_df["성별"] == "남"],
                 subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
             )
         with gender_right:
             render_highlight_rank_section(
-                "여배우 S 10",
+                "여배우 Top 10",
                 result_df[result_df["성별"] == "여"],
                 subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
             )
 
     with st.container(border=True):
-        st.markdown("<div class='overview-section-title'>연령대별 S 10</div>", unsafe_allow_html=True)
+        st.markdown("<div class='overview-section-title'>연령대별 Top 10</div>", unsafe_allow_html=True)
         age_cols = st.columns(2)
         for i, age_group in enumerate(AGE_GROUP_ORDER):
             with age_cols[i % 2]:
                 render_highlight_rank_section(
-                    f"{age_group} S 10",
+                    f"{age_group} Top 10",
                     result_df[result_df["연령대"] == age_group],
                     subtitle_builder=lambda r: f"{r.get('성별', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
                     compact=True,
