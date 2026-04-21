@@ -601,7 +601,6 @@ def build_result_table(raw_df: pd.DataFrame) -> pd.DataFrame:
     weights = DEFAULT_WEIGHTS.copy()
     weights.update(get_secret_section("weights"))
     thresholds = DEFAULT_AXIS_THRESHOLDS.copy()
-    thresholds.update(get_secret_section("axis_grading"))
 
     df = raw_df.copy()
     df["r1"] = (df["작품내랭킹"] == 1).astype(float)
@@ -685,7 +684,7 @@ def build_result_table(raw_df: pd.DataFrame) -> pd.DataFrame:
         + result["안정백분율"] * float(weights.get("stability", 0.3))
         + result["기여백분율"] * float(weights.get("contribution", 0.3))
     )
-    result["합산백분율"] = percentrank_inc_min(result["합산점수"])
+    result["합산백분율"] = result["합산점수"] / 100
     result["합산티어"] = result["합산백분율"].apply(lambda x: axis_grade(x, thresholds))
     result["대분류티어"] = result["합산티어"].apply(major_tier)
 
