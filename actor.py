@@ -1052,6 +1052,168 @@ def chip_html(label: str, grade: str) -> str:
     return f"<span class='chip' style='background:{bg}; color:{fg};'>{label}</span>"
 
 
+def hex_to_rgba(hex_color: str, alpha: float) -> str:
+    hex_color = str(hex_color).strip().lstrip("#")
+    if len(hex_color) != 6:
+        return f"rgba(100,116,139,{alpha})"
+    r = int(hex_color[0:2], 16)
+    g = int(hex_color[2:4], 16)
+    b = int(hex_color[4:6], 16)
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+def build_overview_sunburst_figure(result_df: pd.DataFrame):
+    df = result_df.copy()
+    df = df[df["성별"].isin(["남", "여"]) & df["연령대"].isin(AGE_GROUP_ORDER)].copy()
+    if df.empty:
+        fig = go.Figure()
+        fig.update_layout(height=520, margin=dict(l=10, r=10, t=10, b=10))
+        return fig
+
+    labels = ["전체"]
+    parents = [""]
+    values = [len(df)]
+    ids = ["전체"]
+    colors = ["#eef2f7"]
+    custom = [("전체", "", "", len(df))]
+
+    for grade in GRADE_ORDER:
+        grade_df = df[df["합산등급"] == grade]
+        if grade_df.empty:
+            continue
+        grade_id = f"grade::{grade}"
+        grade_color = GRADE_BG.get(grade, "#64748b")
+        labels.append(grade)
+        parents.append("전체")
+        values.append(len(grade_df))
+        ids.append(grade_id)
+        colors.append(grade_color)
+        custom.append((grade, "", "", len(grade_df)))
+
+        for gender in ["남", "여"]:
+            gender_df = grade_df[grade_df["성별"] == gender]
+            if gender_df.empty:
+                continue
+            gender_id = f"{grade_id}::{gender}"
+            labels.append(gender)
+            parents.append(grade_id)
+            values.append(len(gender_df))
+            ids.append(gender_id)
+            colors.append(hex_to_rgba(grade_color, 0.82))
+            custom.append((grade, gender, "", len(gender_df)))
+
+            for age in AGE_GROUP_ORDER:
+                age_df = gender_df[gender_df["연령대"] == age]
+                if age_df.empty:
+                    continue
+                age_id = f"{gender_id}::{age}"
+                labels.append(age)
+                parents.append(gender_id)
+                values.append(len(age_df))
+                ids.append(age_id)
+                colors.append(hex_to_rgba(grade_color, 0.58))
+                custom.append((grade, gender, age, len(age_df)))
+
+    customdata = np.array(custom, dtype=object)
+    fig = go.Figure(go.Sunburst(
+        ids=ids,
+        labels=labels,
+        parents=parents,
+        values=values,
+        branchvalues="total",
+        marker=dict(colors=colors, line=dict(color="white", width=2)),
+        insidetextorientation="radial",
+        maxdepth=3,
+        sort=False,
+        customdata=customdata,
+        hovertemplate=(
+            "<b>%{label}</b><br>"
+            "등급: %{customdata[0]}<br>"
+            "성별: %{customdata[1]}<br>"
+            "연령대: %{customdata[2]}<br>"
+            "배우 수: %{value}명<br>"
+            "전체 비중: %{percentRoot:.1%}<extra></extra>"
+        ),
+        textinfo="label+percent root",
+    ))
+    fig.update_layout(
+        height=520,
+        margin=dict(l=10, r=10, t=10, b=10),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        uniformtext=dict(minsize=10, mode="hide"),
+    )
+    return fig
+
+
+def build_overview_sunburst_insights(result_df: pd.DataFrame) -> List[Dict[str, str]]:
+    df = result_df.copy()
+    df = df[df["성별"].isin(["남", "여"]) & df["연령대"].isin(AGE_GROUP_ORDER)].copy()
+    if df.empty:
+        return []
+
+    total_n = len(df)
+    group_counts = df.groupby(["성별", "연령대"]).size().reset_index(name="count")
+    top_total = group_counts.sort_values(["count", "성별", "연령대"], ascending=[False, True, True]).iloc[0]
+
+    s_df = df[df["합산등급"] == "S"]
+    if s_df.empty:
+        s_title = "S등급 핵심 집단"
+        s_value = "데이터 없음"
+        s_sub = "현재 S등급 배우가 없습니다."
+    else:
+        s_counts = s_df.groupby(["성별", "연령대"]).size().reset_index(name="count").sort_values("count", ascending=False)
+        s_top = s_counts.iloc[0]
+        s_title = "S등급 핵심 집단"
+        s_value = f"{s_top['성별']}성 {s_top['연령대']}"
+        s_sub = f"S등급 {len(s_df)}명 중 {int(s_top['count'])}명 ({s_top['count'] / len(s_df) * 100:.0f}%)"
+
+    upper_df = df[df["합산등급"].apply(lambda x: str(x) == "S" or str(x).startswith("A"))]
+    if upper_df.empty:
+        upper_title = "A등급 이상 중심 집단"
+        upper_value = "데이터 없음"
+        upper_sub = "A등급 이상 배우가 없습니다."
+    else:
+        upper_counts = upper_df.groupby(["성별", "연령대"]).size().reset_index(name="count").sort_values("count", ascending=False)
+        upper_top = upper_counts.iloc[0]
+        upper_title = "A등급 이상 중심 집단"
+        upper_value = f"{upper_top['성별']}성 {upper_top['연령대']}"
+        upper_sub = f"A등급 이상 {len(upper_df)}명 중 {int(upper_top['count'])}명 ({upper_top['count'] / len(upper_df) * 100:.0f}%)"
+
+    low_df = df[df["합산등급"].apply(lambda x: str(x).startswith("C") or str(x).startswith("B"))]
+    if low_df.empty:
+        low_title = "B·C등급 비중 상위 집단"
+        low_value = "데이터 없음"
+        low_sub = "B·C등급 배우가 없습니다."
+    else:
+        low_counts = low_df.groupby(["성별", "연령대"]).size().reset_index(name="count").sort_values("count", ascending=False)
+        low_top = low_counts.iloc[0]
+        low_title = "B·C등급 비중 상위 집단"
+        low_value = f"{low_top['성별']}성 {low_top['연령대']}"
+        low_sub = f"B·C등급 {len(low_df)}명 중 {int(low_top['count'])}명 ({low_top['count'] / len(low_df) * 100:.0f}%)"
+
+    return [
+        {
+            "title": "전체 최다 구성 집단",
+            "value": f"{top_total['성별']}성 {top_total['연령대']}",
+            "sub": f"전체 {total_n}명 중 {int(top_total['count'])}명 ({top_total['count'] / total_n * 100:.0f}%)",
+        },
+        {"title": s_title, "value": s_value, "sub": s_sub},
+        {"title": upper_title, "value": upper_value, "sub": upper_sub},
+        {"title": low_title, "value": low_value, "sub": low_sub},
+    ]
+
+
+def overview_insight_card(title: str, value: str, sub: str) -> str:
+    return f"""
+    <div class='summary-card' style='min-height:132px; padding:16px 18px;'>
+        <div class='summary-title' style='margin-bottom:8px;'>{title}</div>
+        <div class='summary-big' style='font-size:1.4rem; line-height:1.18;'>{value}</div>
+        <div class='summary-sub' style='margin-top:8px;'>{sub}</div>
+    </div>
+    """
+
+
 
 def parse_week_label(label: str):
     s = str(label).strip()
@@ -1362,11 +1524,30 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         metric_card("현재 1위 배우", top1["배우"], f"합산점수 {format_score(top1['합산점수'])}")
 
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    heatmap_fig = build_overview_demo_figures(result_df)
+    sunburst_fig = build_overview_sunburst_figure(result_df)
+    insight_cards = build_overview_sunburst_insights(result_df)
     with st.container(border=True):
-        st.markdown("<div class='overview-section-title'>등급별 성·연령 분포</div>", unsafe_allow_html=True)
-        st.markdown("<div class='overview-section-sub'>각 성·연령 집단 내부에서 합산등급이 어떻게 분포하는지 비중으로 보여줍니다.</div>", unsafe_allow_html=True)
-        st.plotly_chart(heatmap_fig, use_container_width=True)
+        st.markdown("<div class='overview-section-title'>등급별 성·연령 구성</div>", unsafe_allow_html=True)
+        st.markdown("<div class='overview-section-sub'>중심에서 바깥으로 갈수록 합산등급 → 성별 → 연령대 순으로 구성 비중을 보여줍니다.</div>", unsafe_allow_html=True)
+        left_col, right_col = st.columns([1.7, 1.0])
+        with left_col:
+            st.plotly_chart(sunburst_fig, use_container_width=True)
+        with right_col:
+            for card in insight_cards:
+                st.markdown(overview_insight_card(card['title'], card['value'], card['sub']), unsafe_allow_html=True)
+                st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div class='summary-card' style='min-height:118px; padding:16px 18px;'>
+                    <div class='summary-title' style='margin-bottom:8px;'>차트 읽는 법</div>
+                    <div class='summary-sub' style='margin-top:0;'>
+                        안쪽은 <b>합산등급</b>, 중간은 <b>성별</b>, 바깥은 <b>연령대</b>입니다.<br>
+                        마우스를 올리면 각 조각의 배우 수와 전체 비중을 확인할 수 있습니다.
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
     st.markdown("<div class='overview-line-section'>", unsafe_allow_html=True)
     st.markdown("<div class='overview-parent-title'>성별별 Top 10</div>", unsafe_allow_html=True)
