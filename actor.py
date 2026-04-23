@@ -854,7 +854,7 @@ def build_overview_demo_figures(result_df: pd.DataFrame):
         z = np.zeros((len(y_labels), len(x_labels)))
     else:
         heat_df["성연령"] = heat_df["성별"] + heat_df["연령대"].str.replace("대", "", regex=False)
-        pivot = pd.crosstab(heat_df["합산등급"], heat_df["성연령"], normalize="columns") * 100
+        pivot = pd.crosstab(heat_df["합산등급"], heat_df["성연령"], normalize="index") * 100
         pivot = pivot.reindex(index=y_labels, columns=x_labels, fill_value=0)
         z = pivot.values
 
@@ -876,13 +876,13 @@ def build_overview_demo_figures(result_df: pd.DataFrame):
         ],
         zmin=0,
         zmax=max(10, float(np.nanmax(z)) if np.size(z) else 10),
-        colorbar=dict(title="비중(%)", thickness=12, len=0.78),
-        hovertemplate="등급 %{y}<br>%{x}<br>비중 %{z:.1f}%<extra></extra>",
+        colorbar=dict(title="등급 내 비중(%)", thickness=12, len=0.78),
+        hovertemplate="등급 %{y}<br>%{x}<br>해당 등급 내 비중 %{z:.1f}%<extra></extra>",
         xgap=4,
         ygap=4,
     ))
     fig.update_layout(
-        title="등급별 성·연령 구성 비중",
+        title="등급 내 성·연령 구성 비중",
         height=420,
         margin=dict(l=20, r=20, t=58, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -1524,30 +1524,11 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         metric_card("현재 1위 배우", top1["배우"], f"합산점수 {format_score(top1['합산점수'])}")
 
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    sunburst_fig = build_overview_sunburst_figure(result_df)
-    insight_cards = build_overview_sunburst_insights(result_df)
+    heatmap_fig = build_overview_demo_figures(result_df)
     with st.container(border=True):
         st.markdown("<div class='overview-section-title'>등급별 성·연령 구성</div>", unsafe_allow_html=True)
-        st.markdown("<div class='overview-section-sub'>중심에서 바깥으로 갈수록 합산등급 → 성별 → 연령대 순으로 구성 비중을 보여줍니다.</div>", unsafe_allow_html=True)
-        left_col, right_col = st.columns([1.7, 1.0])
-        with left_col:
-            st.plotly_chart(sunburst_fig, use_container_width=True)
-        with right_col:
-            for card in insight_cards:
-                st.markdown(overview_insight_card(card['title'], card['value'], card['sub']), unsafe_allow_html=True)
-                st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
-            st.markdown(
-                """
-                <div class='summary-card' style='min-height:118px; padding:16px 18px;'>
-                    <div class='summary-title' style='margin-bottom:8px;'>차트 읽는 법</div>
-                    <div class='summary-sub' style='margin-top:0;'>
-                        안쪽은 <b>합산등급</b>, 중간은 <b>성별</b>, 바깥은 <b>연령대</b>입니다.<br>
-                        마우스를 올리면 각 조각의 배우 수와 전체 비중을 확인할 수 있습니다.
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
+        st.markdown("<div class='overview-section-sub'>각 등급 안에서 어떤 성·연령 집단 비중이 큰지 색상 진하기로 보여줍니다.</div>", unsafe_allow_html=True)
+        st.plotly_chart(heatmap_fig, use_container_width=True)
 
     st.markdown("<div class='overview-line-section'>", unsafe_allow_html=True)
     st.markdown("<div class='overview-parent-title'>성별별 Top 10</div>", unsafe_allow_html=True)
