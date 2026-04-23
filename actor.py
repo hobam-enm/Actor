@@ -61,7 +61,7 @@ GRADE_BG = {
 }
 
 VISIBLE_COLUMNS = [
-    "#", "배우", "성별", "연령대", "합산티어", "폭발력등급", "안정성등급", "기여도등급",
+    "#", "배우", "성별", "연령대", "합산등급", "폭발력등급", "안정성등급", "기여도등급",
     "합산점수", "폭발백분율", "안정백분율", "기여백분율", "배우화제성", "출연작품수"
 ]
 
@@ -80,7 +80,7 @@ DEFAULT_ACTOR_COMBO_PROMPT = r"""역할: 너는 드라마 캐스팅 전략과 �
 입력에는 아래 정보가 포함된다.
 - 메인 배우 목록
 - 서브 배우 목록
-- 각 배우의 합산티어
+- 각 배우의 합산등급
 - 폭발력등급
 - 안정성등급
 - 기여도등급
@@ -93,7 +93,7 @@ DEFAULT_ACTOR_COMBO_PROMPT = r"""역할: 너는 드라마 캐스팅 전략과 �
 - 폭발력: 화제성 파급력과 절대 규모
 - 안정성: 화제 흐름의 지속성과 변동성 완화 정도
 - 기여도: 작품 내 존재감과 중심축 역할의 강도
-- 합산티어: 전체 밸런스를 종합한 위치
+- 합산등급: 전체 밸런스를 종합한 위치
 - 역할군 내 상대위치: 같은 선택 그룹 안에서의 상대적 강약, 그리고 해당 역할군에 기대되는 일반적 수준 대비 위치
 
 === [매우 중요한 해석 원칙: 절대평가 + 상대평가 동시 적용] ===
@@ -361,7 +361,47 @@ def inject_css():
             color:#7b8495;
             margin: -6px 0 14px 0.15rem;
         }
-
+        .overview-parent-title {
+            font-size: 1.22rem;
+            font-weight: 950;
+            color:#172033;
+            margin: 0.1rem 0 0.25rem 0.1rem;
+        }
+        .overview-parent-sub {
+            font-size: 0.88rem;
+            color:#7b8495;
+            margin: 0 0 1rem 0.1rem;
+        }
+        .overview-child-title {
+            font-size: 1rem;
+            font-weight: 900;
+            color:#23314a;
+            margin: 0.2rem 0 0.9rem 0.1rem;
+            padding-top: 0.2rem;
+        }
+        .overview-line-section {
+            padding: 0.4rem 0 1.1rem 0;
+            border-top: 1px solid #dbe4f3;
+        }
+        .detail-panel {
+            background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
+            border: 1px solid #e7ebf3;
+            border-radius: 24px;
+            padding: 18px 18px 20px 18px;
+            box-shadow: 0 10px 28px rgba(31,41,55,0.05);
+            margin-bottom: 16px;
+        }
+        .formula-box {
+            background:#f8fafc;
+            border:1px solid #e2e8f0;
+            border-radius:12px;
+            padding:16px;
+            margin:16px 0 10px 0;
+            color:#334155;
+            font-size:0.94rem;
+            line-height:1.7;
+            font-family:inherit;
+        }
 
         .actor-combo-toolbar {margin: 0.2rem 0 1rem 0;}
         .actor-combo-toolbar .hint {font-size:0.88rem; color:#6b7280; margin-top:4px;}
@@ -689,8 +729,8 @@ def build_result_table(raw_df: pd.DataFrame) -> pd.DataFrame:
         + result["기여백분율"] * float(weights.get("contribution", 0.3))
     )
     result["합산백분율"] = result["합산점수"] / 100
-    result["합산티어"] = result["합산백분율"].apply(lambda x: axis_grade(x, thresholds))
-    result["대분류티어"] = result["합산티어"].apply(major_tier)
+    result["합산등급"] = result["합산백분율"].apply(lambda x: axis_grade(x, thresholds))
+    result["대분류티어"] = result["합산등급"].apply(major_tier)
 
     for col, pct_col in [("폭발", "폭발백분율"), ("안정", "안정백분율"), ("기여", "기여백분율")]:
         result[f"{col}_대분류내점수"] = (
@@ -768,7 +808,7 @@ def rank_list_card(rows: pd.DataFrame, start_rank: int = 4):
             f"<div style='display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #edf1f7;'>"
             f"<div style='min-width:0;'>"
             f"<div style='font-size:0.92rem; font-weight:900; color:#111827;'>{i}위 {r['배우']}</div>"
-            f"<div style='font-size:0.8rem; color:#6b7280; margin-top:3px;'>{r['합산티어']}</div>"
+            f"<div style='font-size:0.8rem; color:#6b7280; margin-top:3px;'>{r['합산등급']}</div>"
             f"</div>"
             f"<div style='font-size:0.92rem; font-weight:900; color:#111827; white-space:nowrap;'>{format_score(r['합산점수'])}</div>"
             f"</div>"
@@ -792,7 +832,7 @@ def build_overview_demo_figures(result_df: pd.DataFrame):
         z = np.zeros((len(y_labels), len(x_labels)))
     else:
         heat_df["성연령"] = heat_df["성별"] + heat_df["연령대"].str.replace("대", "", regex=False)
-        pivot = pd.crosstab(heat_df["합산티어"], heat_df["성연령"], normalize="columns") * 100
+        pivot = pd.crosstab(heat_df["합산등급"], heat_df["성연령"], normalize="columns") * 100
         pivot = pivot.reindex(index=y_labels, columns=x_labels, fill_value=0)
         z = pivot.values
 
@@ -815,12 +855,12 @@ def build_overview_demo_figures(result_df: pd.DataFrame):
         zmin=0,
         zmax=max(10, float(np.nanmax(z)) if np.size(z) else 10),
         colorbar=dict(title="비중(%)", thickness=12, len=0.78),
-        hovertemplate="티어 %{y}<br>%{x}<br>비중 %{z:.1f}%<extra></extra>",
+        hovertemplate="등급 %{y}<br>%{x}<br>비중 %{z:.1f}%<extra></extra>",
         xgap=4,
         ygap=4,
     ))
     fig.update_layout(
-        title="티어별 성·연령 구성 비중",
+        title="등급별 성·연령 구성 비중",
         height=420,
         margin=dict(l=20, r=20, t=58, b=20),
         paper_bgcolor="rgba(0,0,0,0)",
@@ -835,7 +875,8 @@ def build_overview_demo_figures(result_df: pd.DataFrame):
 
 def render_highlight_rank_section(title: str, sub_df: pd.DataFrame, subtitle_builder=None, compact=False):
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
+    if title:
+        st.markdown(f"<div class='section-title'>{title}</div>", unsafe_allow_html=True)
     rows = sub_df.sort_values(['합산점수', '배우화제성'], ascending=[False, False]).head(10).reset_index(drop=True)
     if rows.empty:
         st.info('표시할 배우가 없습니다.')
@@ -849,7 +890,7 @@ def render_highlight_rank_section(title: str, sub_df: pd.DataFrame, subtitle_bui
     with c1:
         for i, (_, r) in enumerate(top_rows.iterrows(), start=1):
             subtitle = subtitle_builder(r) if subtitle_builder else ''
-            top3_card(i, r['배우'], r['합산티어'], r['합산점수'], subtitle=subtitle)
+            top3_card(i, r['배우'], r['합산등급'], r['합산점수'], subtitle=subtitle)
             if i < len(top_rows):
                 st.markdown("<div style='height:10px;'></div>", unsafe_allow_html=True)
 
@@ -923,7 +964,7 @@ def actor_summary_card(row: pd.Series):
         )
 
     with c2:
-        st.markdown(summary_grade_card("종합등급", row["합산티어"], accent=True), unsafe_allow_html=True)
+        st.markdown(summary_grade_card("종합등급", row["합산등급"], accent=True), unsafe_allow_html=True)
 
     with c3:
         st.markdown(summary_grade_card("폭발력 등급", row["폭발력등급"]), unsafe_allow_html=True)
@@ -947,16 +988,16 @@ def build_actor_program_summary(raw_df: pd.DataFrame, actor_name: str) -> pd.Dat
     return agg
 
 
-def make_triangle_chart(values: List[float], title: str):
+def make_triangle_chart(values: List[float], title: str, line_color: str = "#356AE6", fill_color: str = "rgba(53,106,230,0.22)"):
     fig = go.Figure()
     fig.add_trace(
         go.Scatterpolar(
             r=values + [values[0]],
             theta=["폭발력", "안정성", "기여도", "폭발력"],
             fill="toself",
-            line=dict(color="#356AE6", width=3),
-            fillcolor="rgba(53,106,230,0.22)",
-            marker=dict(size=8, color="#356AE6"),
+            line=dict(color=line_color, width=3),
+            fillcolor=fill_color,
+            marker=dict(size=8, color=line_color),
             name=title,
         )
     )
@@ -1046,10 +1087,66 @@ def get_data_period_caption(raw_df: pd.DataFrame) -> str:
 
 
 # ===== 참고사항 페이지 렌더링 =====
+
+def detail_grade_group(grade: str) -> str:
+    g = str(grade)
+    if g == "S" or g.startswith("A"):
+        return "S·A"
+    if g.startswith("B"):
+        return "B"
+    return "C"
+
+
+def add_detail_relative_scores(result_df: pd.DataFrame) -> pd.DataFrame:
+    df = result_df.copy()
+    df["상세등급군"] = df["합산등급"].apply(detail_grade_group)
+    for col, pct_col in [("폭발", "폭발백분율"), ("안정", "안정백분율"), ("기여", "기여백분율")]:
+        df[f"{col}_상세등급군점수"] = (
+            df.groupby("상세등급군")[pct_col]
+            .transform(lambda s: percentrank_inc_min(s) * 100)
+        )
+    return df
+
+
+def make_axis_compare_chart(overall_values: List[float], relative_values: List[float], relative_label: str):
+    categories = ["폭발력", "안정성", "기여도"]
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=categories,
+            y=overall_values,
+            name="전체 기준",
+            marker=dict(color="#356AE6"),
+            text=[f"{v:.0f}" for v in overall_values],
+            textposition="outside",
+        )
+    )
+    fig.add_trace(
+        go.Bar(
+            x=categories,
+            y=relative_values,
+            name=relative_label,
+            marker=dict(color="#7a3cff"),
+            text=[f"{v:.0f}" for v in relative_values],
+            textposition="outside",
+        )
+    )
+    fig.update_layout(
+        title="항목별 위치 비교",
+        barmode="group",
+        height=360,
+        margin=dict(l=20, r=20, t=50, b=20),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        yaxis=dict(range=[0, 100], title="점수"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    )
+    return fig
+
+
 def render_reference():
     st.markdown("<div class='section-title'>참고사항</div>", unsafe_allow_html=True)
 
-    # 1. 지표 구성 개요
     st.markdown(
         """<div class='card'>
 <div class='rep-title' style='font-size:1.1rem;'>1. 지표 구성 개요</div>
@@ -1072,42 +1169,46 @@ def render_reference():
     st.markdown("<div class='rep-title' style='font-size:1.1rem; margin-left:0.15rem;'>2. 상세 지표 설명</div>", unsafe_allow_html=True)
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
 
-    # 2-1. 폭발력
     st.markdown(
         """<div class='summary-card' style='min-height:auto; padding:22px 26px;'>
 <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>💡 폭발력</div>
-<div class='actor-sub' style='line-height: 1.7;'>
+<div class='actor-sub' style='line-height: 1.72;'>
 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
-<b>대표작의 고점과 저점 제거 후 대표 퍼포먼스를 함께 반영한 화제성 점화 능력</b>
-<div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0 6px 0;'>
+<b>한 배우가 만들어낼 수 있는 최고 수준의 화제 확장력과, 대표작 외 작품들까지 포함한 재현 가능성을 함께 반영한 지표</b><br><br>
+폭발력은 단순히 <b>가장 잘된 작품 하나</b>만 보는 지표가 아닙니다. 최고 성과를 낸 대표작의 존재감은 반영하되, 나머지 작품에서도 일정 수준 이상의 성과를 만들 수 있는지를 함께 봅니다. 즉, <b>"한 번 크게 터진 배우"인지, "고점을 만들면서도 평균 체급이 받쳐주는 배우"인지</b>를 구분하려는 목적입니다.
+<div class='formula-box'>
 <b style='color:#0f172a; font-size:1rem;'>폭발력</b> = 폭발력지수의 전체 백분위<br><br>
-<b style='color:#0f172a;'>폭발력지수 =</b> 0.5 × 대표작성과백분위 + 0.5 × 최하제외평균백분위<br>
-<span style='color:#475569; font-size:0.88rem;'>단, 출연작품수 1개인 경우에는 대표작 과대평가를 막기 위해 <b>0.5 × 대표작성과백분위 × 0.75 + 0.5 × 최하제외평균백분위</b>를 적용</span>
+<b style='color:#0f172a;'>폭발력지수</b> = 0.5 × 대표작성과백분위 + 0.5 × 최하제외평균백분위
 </div>
+<span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>세부 항목</span>
+<ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.68;'>
+<li><b>대표작성과백분위</b> : 해당 배우의 작품별 주평균 배우화제성 중 가장 높은 값을 전체 배우와 비교한 백분위입니다.</li>
+<li><b>최하제외평균백분위</b> : 작품별 주평균 배우화제성에서 가장 낮은 작품을 제외하고 계산한 평균의 백분위입니다. 단발성 저점의 영향은 줄이고, 전반적 상단 체급은 살리기 위한 장치입니다.</li>
+<li><b>출연작품수 1개 보정</b> : 작품이 1개뿐인 배우는 대표작 한 편만으로 과대평가될 수 있어, 대표작성과 항목에 0.75 보정을 적용합니다.</li>
+<li><b>해석 포인트</b> : 대표작만 압도적인 배우는 고점은 높게 나오더라도 평균 재현력이 약하면 점수가 제한됩니다. 반대로 대표작 고점과 복수 작품 평균이 함께 높은 배우는 상위 폭발력으로 평가됩니다.</li>
+</ul>
 </div>
 </div>""",
         unsafe_allow_html=True,
     )
 
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-
-    # 2-2. 안정성
     st.markdown(
         """<div class='summary-card' style='min-height:auto; padding:22px 26px;'>
 <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>⚖️ 안정성</div>
-<div class='actor-sub' style='line-height: 1.7;'>
+<div class='actor-sub' style='line-height: 1.72;'>
 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
 <b>여러 작품에서 얼마나 꾸준히 성과를 냈는지</b> (보정 작품평균, 히트 분산 보정, 작품수 보정, 대표작 성과를 함께 반영)
-<div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0; color:#334155; font-family:monospace; font-size:0.95rem; line-height:1.6;'>
+<div class='formula-box'>
 <b style='color:#0f172a; font-size:1rem;'>안정성</b> = 꾸준함지수의 전체 백분위<br><br>
-<b style='color:#0f172a;'>꾸준함지수 = MIN( 1,</b><br>
-&nbsp;&nbsp;&nbsp;&nbsp;0.25 × 보정작품평균정규화<br>
+<b style='color:#0f172a;'>꾸준함지수</b> = MIN(1,<br>
+&nbsp;&nbsp;0.25 × 보정작품평균정규화<br>
 &nbsp;&nbsp;+ 0.55 × (0.7 × 히트분산정규화 + 0.3 × 작품수보정)<br>
 &nbsp;&nbsp;+ 0.20 × (대표작성과백분위³)<br>
-<b style='color:#0f172a;'>)</b>
+)
 </div>
 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>세부 항목</span>
-<ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.65;'>
+<ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.68;'>
 <li><b>보정작품평균정규화</b> = (보정작품평균 - 최소 보정작품평균) / (최대 보정작품평균 - 최소 보정작품평균)</li>
 <li><b>보정작품평균</b> = (배우화제성 + 3 × 전체 작품평균 평균) / (출연작품수 + 3)</li>
 <li><b>히트분산정규화</b> = (히트분산지수 - 최소 히트분산지수) / (최대 히트분산지수 - 최소 히트분산지수)</li>
@@ -1121,23 +1222,21 @@ def render_reference():
     )
 
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-
-    # 2-3. 기여도
     st.markdown(
         """<div class='summary-card' style='min-height:auto; padding:22px 26px;'>
 <div class='summary-title' style='font-size:1.05rem; color:#111827; margin-bottom:12px;'>🎯 기여도</div>
-<div class='actor-sub' style='line-height: 1.7;'>
+<div class='actor-sub' style='line-height: 1.72;'>
 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>정의</span><br>
 <b>작품 전체 성과 안에서 얼마나 중심적인 존재감을 보였는지</b> (작은 작품의 과대평가를 막기 위해 작품 체급 보정 추가 적용)
-<div style='background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:16px; margin:16px 0; color:#334155; font-family:monospace; font-size:0.95rem; line-height:1.6;'>
+<div class='formula-box'>
 <b style='color:#0f172a; font-size:1rem;'>기여도</b> = 최종기여도의 전체 백분위<br><br>
 <b style='color:#0f172a;'>최종기여도</b> = 보정기여도 × 작품체급보정<br><br>
-<b style='color:#0f172a;'>보정기여도 =</b><br>
-&nbsp;&nbsp;&nbsp;&nbsp;0.5 × 보정작품평균정규화<br>
+<b style='color:#0f172a;'>보정기여도</b> =<br>
+&nbsp;&nbsp;0.5 × 보정작품평균정규화<br>
 &nbsp;&nbsp;+ 0.5 × (화제성기여도 × (1위배율 + 2위배율 + 3위배율))
 </div>
 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>세부 항목</span>
-<ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.65;'>
+<ul style='margin-top:6px; padding-left:22px; color:#475569; font-size:0.9rem; line-height:1.68;'>
 <li><b>화제성기여도</b> = 배우화제성 / 드라마화제성</li>
 <li><b>1위/2위/3위배율</b> = (해당 순위 횟수 / 출연작품수)에 각각 가중치(1, 0.5, 0.3) 적용</li>
 <li><b>작품체급보정</b> = 0.45 + 0.55 × 작품체급백분위</li>
@@ -1149,16 +1248,14 @@ def render_reference():
     )
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
-
-    # 3. 최종 합산점수 & 4. 등급 컷 (2단 배치)
     c1, c2 = st.columns(2)
     with c1:
         st.markdown(
             """<div class='card'>
 <div class='rep-title'>3. 최종 합산점수</div>
-<div class='actor-sub' style='line-height: 1.7;'>
+<div class='actor-sub' style='line-height: 1.72;'>
 <span style='color:#6b7280; font-size:0.85rem; font-weight:700;'>산식</span>
-<div style='background:#f1f5fb; border:1px solid #dbe4f3; border-radius:10px; padding:14px; margin-top:8px;'>
+<div class='formula-box'>
 <b style='color:#1f2937;'>합산점수</b> = 100 × (<br>
 &nbsp;&nbsp;0.4 × 폭발력<br>
 &nbsp;&nbsp;+ 0.3 × 안정성<br>
@@ -1194,8 +1291,10 @@ def render_reference():
             unsafe_allow_html=True,
         )
 
+
 def table_styler(df: pd.DataFrame):
     show = df[VISIBLE_COLUMNS].copy()
+    show = show.rename(columns={"합산등급": "합산등급"})
     show["합산점수"] = pd.to_numeric(show["합산점수"], errors="coerce").map(format_score)
     for c in ["폭발백분율", "안정백분율", "기여백분율"]:
         show[c] = pd.to_numeric(show[c], errors="coerce").map(format_percent_0)
@@ -1211,8 +1310,8 @@ def table_styler(df: pd.DataFrame):
 
     styler = (
         show.style
-        .map(bg_color, subset=["합산티어", "폭발력등급", "안정성등급", "기여도등급"])
-        .set_properties(subset=["합산티어"], **{"font-weight": "900"})
+        .map(bg_color, subset=["합산등급", "폭발력등급", "안정성등급", "기여도등급"])
+        .set_properties(subset=["합산등급"], **{"font-weight": "900"})
         .set_table_styles([
             {"selector": "th", "props": [("background-color", "#f1f5fb"), ("color", "#374151"), ("font-weight", "800")]},
             {"selector": "td", "props": [("padding", "8px 10px")]},
@@ -1243,44 +1342,51 @@ def render_overview(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
     heatmap_fig = build_overview_demo_figures(result_df)
     with st.container(border=True):
-        st.markdown("<div class='overview-section-title'>티어별 성·연령 분포</div>", unsafe_allow_html=True)
-        st.markdown("<div class='overview-section-sub'>각 성·연령 집단 내부에서 합산티어가 어떻게 분포하는지 비중으로 보여줍니다.</div>", unsafe_allow_html=True)
+        st.markdown("<div class='overview-section-title'>등급별 성·연령 분포</div>", unsafe_allow_html=True)
+        st.markdown("<div class='overview-section-sub'>각 성·연령 집단 내부에서 합산등급이 어떻게 분포하는지 비중으로 보여줍니다.</div>", unsafe_allow_html=True)
         st.plotly_chart(heatmap_fig, use_container_width=True)
 
-    with st.container(border=True):
-        st.markdown("<div class='overview-section-title'>성별 Top 10</div>", unsafe_allow_html=True)
-        gender_left, gender_right = st.columns(2)
-        with gender_left:
-            render_highlight_rank_section(
-                "남배우 Top 10",
-                result_df[result_df["성별"] == "남"],
-                subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
-            )
-        with gender_right:
-            render_highlight_rank_section(
-                "여배우 Top 10",
-                result_df[result_df["성별"] == "여"],
-                subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
-            )
+    st.markdown("<div class='overview-line-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='overview-parent-title'>성별별 Top 10</div>", unsafe_allow_html=True)
+    st.markdown("<div class='overview-parent-sub'>성별을 상위 카테고리로 두고, 각 그룹의 상위 배우를 보여줍니다.</div>", unsafe_allow_html=True)
+    gender_left, gender_right = st.columns(2)
+    with gender_left:
+        st.markdown("<div class='overview-child-title'>남배우 Top 10</div>", unsafe_allow_html=True)
+        render_highlight_rank_section(
+            "",
+            result_df[result_df["성별"] == "남"],
+            subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+        )
+    with gender_right:
+        st.markdown("<div class='overview-child-title'>여배우 Top 10</div>", unsafe_allow_html=True)
+        render_highlight_rank_section(
+            "",
+            result_df[result_df["성별"] == "여"],
+            subtitle_builder=lambda r: f"{r.get('연령대', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+        )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    with st.container(border=True):
-        st.markdown("<div class='overview-section-title'>연령대별 Top 10</div>", unsafe_allow_html=True)
-        age_cols = st.columns(2)
-        for i, age_group in enumerate(AGE_GROUP_ORDER):
-            with age_cols[i % 2]:
-                render_highlight_rank_section(
-                    f"{age_group} Top 10",
-                    result_df[result_df["연령대"] == age_group],
-                    subtitle_builder=lambda r: f"{r.get('성별', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
-                    compact=True,
-                )
+    st.markdown("<div class='overview-line-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='overview-parent-title'>연령대별 Top 10</div>", unsafe_allow_html=True)
+    st.markdown("<div class='overview-parent-sub'>연령대를 상위 카테고리로 두고, 각 그룹의 상위 배우를 보여줍니다.</div>", unsafe_allow_html=True)
+    age_cols = st.columns(2)
+    for i, age_group in enumerate(AGE_GROUP_ORDER):
+        with age_cols[i % 2]:
+            st.markdown(f"<div class='overview-child-title'>{age_group} Top 10</div>", unsafe_allow_html=True)
+            render_highlight_rank_section(
+                "",
+                result_df[result_df["연령대"] == age_group],
+                subtitle_builder=lambda r: f"{r.get('성별', '미상')} · 배우화제성 {format_int(r['배우화제성'])}",
+                compact=True,
+            )
+    st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("<div class='spacer-lg'></div>", unsafe_allow_html=True)
     st.markdown("<div class='section-title'>전체 배우 리스트</div>", unsafe_allow_html=True)
     st.dataframe(table_styler(result_df), use_container_width=True, hide_index=True, height=760)
 
 
-def similar_tier_actors(result_df: pd.DataFrame, row: pd.Series, top_n: int = 4) -> pd.DataFrame:
+def similar_grade_actors(result_df: pd.DataFrame, row: pd.Series, top_n: int = 4) -> pd.DataFrame:
     pool = result_df[
         (result_df["폭발력등급"] == row["폭발력등급"]) |
         (result_df["안정성등급"] == row["안정성등급"]) |
@@ -1314,30 +1420,48 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
 
     actor_summary_card(row)
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='detail-panel'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>그래프 영역</div>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
+    detail_label = f"동일 등급군 기준 · {row['상세등급군']}"
     with c1:
         fig_all = make_triangle_chart(
             [row["폭발_전체점수"], row["안정_전체점수"], row["기여_전체점수"]],
             "항목별 점수 · 전체 기준",
+            line_color="#356AE6",
+            fill_color="rgba(53,106,230,0.22)",
         )
         st.plotly_chart(fig_all, use_container_width=True)
     with c2:
-        fig_tier = make_triangle_chart(
-            [row["폭발_대분류내점수"], row["안정_대분류내점수"], row["기여_대분류내점수"]],
-            f"항목별 점수 · {row['대분류티어']} 등급 기준",
+        fig_group = make_triangle_chart(
+            [row["폭발_상세등급군점수"], row["안정_상세등급군점수"], row["기여_상세등급군점수"]],
+            f"항목별 점수 · {detail_label}",
+            line_color="#7a3cff",
+            fill_color="rgba(122,60,255,0.20)",
         )
-        st.plotly_chart(fig_tier, use_container_width=True)
+        st.plotly_chart(fig_group, use_container_width=True)
 
-    st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>대표출연작</div>", unsafe_allow_html=True)
+    fig_compare = make_axis_compare_chart(
+        [row["폭발_전체점수"], row["안정_전체점수"], row["기여_전체점수"]],
+        [row["폭발_상세등급군점수"], row["안정_상세등급군점수"], row["기여_상세등급군점수"]],
+        detail_label,
+    )
+    st.plotly_chart(fig_compare, use_container_width=True)
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='detail-panel'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>대표출연작 영역</div>", unsafe_allow_html=True)
     actor_programs = build_actor_program_summary(raw_df, selected_actor).head(6)
     cols = st.columns(3)
     for idx, r in actor_programs.iterrows():
         with cols[idx % 3]:
             work_card(r["프로그램명"], r["드라마화제성"], r["배우화제성"])
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='section-title'>유사티어 배우</div>", unsafe_allow_html=True)
-    sim = similar_tier_actors(result_df, row, 4)
+    st.markdown("<div class='detail-panel'>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>유사등급 배우 영역</div>", unsafe_allow_html=True)
+    sim = similar_grade_actors(result_df, row, 4)
     cols = st.columns(4)
     for i, (_, r) in enumerate(sim.iterrows()):
         with cols[i % 4]:
@@ -1346,27 +1470,36 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
                 <div class='mini-card'>
                     <div class='actor-name'>{r['배우']}</div>
                     <div class='actor-sub'>폭발 {r['폭발력등급']} · 안정 {r['안정성등급']} · 기여 {r['기여도등급']}</div>
-                    <div class='actor-sub' style='margin-top:8px;'>합산티어 <b>{r['합산티어']}</b> · 점수 {format_score(r['합산점수'])}</div>
+                    <div class='actor-sub' style='margin-top:8px;'>합산등급 <b>{r['합산등급']}</b> · 점수 {format_score(r['합산점수'])}</div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
+    st.markdown("</div>", unsafe_allow_html=True)
 
 
 def compare_table_rows(result_df: pd.DataFrame, names: List[str]) -> pd.DataFrame:
-    cols = ["배우", "성별", "연령대", "합산티어", "폭발력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]
-    return result_df[result_df["배우"].isin(names)][cols].sort_values("합산점수", ascending=False)
+    cols = ["배우", "성별", "연령대", "합산등급", "폭발력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]
+    df = result_df[result_df["배우"].isin(names)][cols].sort_values("합산점수", ascending=False).copy()
+    return df.rename(columns={"합산등급": "합산등급"})
 
 
-def render_actor_radar(result_df: pd.DataFrame, chart_names: List[str], title: str, dynamic_range: bool = False):
+def render_actor_radar(result_df: pd.DataFrame, chart_names: List[str], title: str, dynamic_range: bool = False, relative_mode: bool = False):
     if not chart_names:
         st.info("조건에 맞는 배우가 없습니다.")
         return
     fig = go.Figure()
     all_values = []
+    chart_df = result_df[result_df["배우"].isin(chart_names)].copy()
+    if relative_mode and not chart_df.empty:
+        for axis in ["폭발", "안정", "기여"]:
+            chart_df[f"{axis}_비교점수"] = percentrank_inc_min(chart_df[f"{axis}백분율"]) * 100
     for name in chart_names:
-        r = result_df[result_df["배우"] == name].iloc[0]
-        vals = [r["폭발_전체점수"], r["안정_전체점수"], r["기여_전체점수"], r["폭발_전체점수"]]
+        r = chart_df[chart_df["배우"] == name].iloc[0]
+        if relative_mode:
+            vals = [r["폭발_비교점수"], r["안정_비교점수"], r["기여_비교점수"], r["폭발_비교점수"]]
+        else:
+            vals = [r["폭발_전체점수"], r["안정_전체점수"], r["기여_전체점수"], r["폭발_전체점수"]]
         all_values.extend(vals[:-1])
         fig.add_trace(
             go.Scatterpolar(
@@ -1380,9 +1513,12 @@ def render_actor_radar(result_df: pd.DataFrame, chart_names: List[str], title: s
         )
     if dynamic_range and all_values:
         rmin, rmax = min(all_values), max(all_values)
-        pad = max(6, (rmax - rmin) * 0.45)
+        pad = max(4, (rmax - rmin) * 0.30)
         low = max(0, math.floor((rmin - pad) / 5) * 5)
         high = min(100, math.ceil((rmax + pad) / 5) * 5)
+        if high - low < 20:
+            low = max(0, low - 10)
+            high = min(100, high + 10)
     else:
         low, high = 0, 100
     fig.update_layout(
@@ -1400,19 +1536,21 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     tab_group, tab_pair = st.tabs(["그룹 모아보기", "배우 직접 선택 1:1 비교"])
 
     with tab_group:
-        c1, c2 = st.columns(2)
+        c1, c2, c3, c4 = st.columns(4)
         with c1:
-            selected_programs = st.multiselect(
-                "작품",
-                options=sorted(raw_df["프로그램명"].dropna().astype(str).unique().tolist()),
-                placeholder="전체",
-            )
             selected_gender = st.multiselect("성별", options=["남", "여", "미상"], placeholder="전체")
         with c2:
-            selected_total_grade = st.multiselect("합산등급", options=GRADE_ORDER, placeholder="전체")
             selected_age_groups = st.multiselect(
                 "연령대",
                 options=sort_age_groups(result_df["연령대"].dropna().astype(str).unique().tolist()),
+                placeholder="전체",
+            )
+        with c3:
+            selected_total_grade = st.multiselect("합산등급", options=GRADE_ORDER, placeholder="전체")
+        with c4:
+            selected_programs = st.multiselect(
+                "작품",
+                options=sorted(raw_df["프로그램명"].dropna().astype(str).unique().tolist()),
                 placeholder="전체",
             )
 
@@ -1429,7 +1567,7 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
             program_actor_names = raw_df[raw_df["프로그램명"].isin(selected_programs)]["인물명"].dropna().astype(str).unique().tolist()
             filtered = filtered[filtered["배우"].isin(program_actor_names)].copy()
         if selected_total_grade:
-            filtered = filtered[filtered["합산티어"].isin(selected_total_grade)].copy()
+            filtered = filtered[filtered["합산등급"].isin(selected_total_grade)].copy()
         if selected_prod_grade:
             filtered = filtered[filtered["폭발력등급"].isin(selected_prod_grade)].copy()
         if selected_stab_grade:
@@ -1447,13 +1585,14 @@ def render_compare(raw_df: pd.DataFrame, result_df: pd.DataFrame):
             st.info("조건에 맞는 배우가 없습니다.")
         else:
             st.dataframe(
-                filtered[["배우", "성별", "연령대", "합산티어", "폭발력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]]
+                filtered[["배우", "성별", "연령대", "합산등급", "폭발력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]]
+                .rename(columns={"합산등급": "합산등급"})
                 .style.format({"합산점수": "{:.2f}", "배우화제성": "{:,.0f}", "출연작품수": "{:,.0f}"}),
                 use_container_width=True,
                 hide_index=True,
                 height=620,
             )
-            render_actor_radar(filtered, filtered["배우"].head(8).tolist(), "조건 일치 상위 배우 비교 · 항목별 점수")
+            render_actor_radar(filtered, filtered["배우"].head(8).tolist(), "조건 일치 배우 비교 · 상대 위치 기준", dynamic_range=True, relative_mode=True)
 
     with tab_pair:
         names = result_df["배우"].tolist()
@@ -1548,10 +1687,10 @@ def build_relative_position_lines(group_df: pd.DataFrame, label: str) -> List[st
         if len(axis_sorted) >= 2 and high_row['배우'] != low_row['배우']:
             lines.append(f"- {label} 조합 내 {axis_label} 상대하위: {low_row['배우']} ({low_row[grade_col]}, {low_row[pct_col] * 100:.1f}%)")
 
-    grade_counts = group_df["합산티어"].value_counts().reindex(GRADE_ORDER, fill_value=0)
+    grade_counts = group_df["합산등급"].value_counts().reindex(GRADE_ORDER, fill_value=0)
     nonzero = [f"{grade} {int(cnt)}명" for grade, cnt in grade_counts.items() if cnt > 0]
     if nonzero:
-        lines.append(f"- {label} 합산티어 분포: " + ", ".join(nonzero))
+        lines.append(f"- {label} 합산등급 분포: " + ", ".join(nonzero))
     return lines
 
 
@@ -1584,11 +1723,11 @@ def build_group_context_lines(group_df: pd.DataFrame, label: str) -> List[str]:
     if group_df.empty:
         return lines
 
-    grade_counts = group_df["합산티어"].value_counts().reindex(GRADE_ORDER, fill_value=0)
-    s_count = int((group_df["합산티어"] == "S").sum())
-    a_count = int(group_df["합산티어"].astype(str).str.startswith("A").sum())
-    b_count = int(group_df["합산티어"].astype(str).str.startswith("B").sum())
-    c_count = int(group_df["합산티어"].astype(str).str.startswith("C").sum())
+    grade_counts = group_df["합산등급"].value_counts().reindex(GRADE_ORDER, fill_value=0)
+    s_count = int((group_df["합산등급"] == "S").sum())
+    a_count = int(group_df["합산등급"].astype(str).str.startswith("A").sum())
+    b_count = int(group_df["합산등급"].astype(str).str.startswith("B").sum())
+    c_count = int(group_df["합산등급"].astype(str).str.startswith("C").sum())
     lines.append(f"- {label} 체급 요약: S {s_count}명, A권 {a_count}명, B권 {b_count}명, C권 {c_count}명")
 
     for axis_label, pct_col in [("폭발력", "폭발백분율"), ("안정성", "안정백분율"), ("기여도", "기여백분율")]:
@@ -1598,7 +1737,7 @@ def build_group_context_lines(group_df: pd.DataFrame, label: str) -> List[str]:
 
     nonzero = [f"{grade} {int(cnt)}명" for grade, cnt in grade_counts.items() if cnt > 0]
     if nonzero:
-        lines.append(f"- {label} 합산티어 분포: " + ", ".join(nonzero))
+        lines.append(f"- {label} 합산등급 분포: " + ", ".join(nonzero))
     return lines
 
 
@@ -1614,7 +1753,7 @@ def build_actor_group_payload(raw_df: pd.DataFrame, group_df: pd.DataFrame, labe
         total_rank = idx + 1
         total_pos = "상위" if total_rank == 1 else ("중위" if total_rank < group_size else "하위")
         line = (
-            f"- {row['배우']} | 성별 {row['성별']} | 연령대 {row['연령대']} | 합산티어 {row['합산티어']} | "
+            f"- {row['배우']} | 성별 {row['성별']} | 연령대 {row['연령대']} | 합산등급 {row['합산등급']} | "
             f"폭발력등급 {row['폭발력등급']} | 안정성등급 {row['안정성등급']} | 기여도등급 {row['기여도등급']} | "
             f"합산점수 {row['합산점수']:.2f} | 폭발백분율 {row['폭발백분율'] * 100:.1f}% | "
             f"안정백분율 {row['안정백분율'] * 100:.1f}% | 기여백분율 {row['기여백분율'] * 100:.1f}% | "
@@ -1759,7 +1898,8 @@ def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         display_df["역할구분"] = display_df["배우"].apply(lambda x: "메인" if x in main_names else "서브")
         display_df = display_df.sort_values(["역할구분", "합산점수", "배우화제성"], ascending=[True, False, False])
         st.dataframe(
-            display_df[["역할구분", "배우", "성별", "연령대", "합산티어", "폭발력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]]
+            display_df[["역할구분", "배우", "성별", "연령대", "합산등급", "폭발력등급", "안정성등급", "기여도등급", "합산점수", "배우화제성", "출연작품수"]]
+            .rename(columns={"합산등급": "합산등급"})
             .style.format({"합산점수": "{:.2f}", "배우화제성": "{:,.0f}", "출연작품수": "{:,.0f}"}),
             use_container_width=True,
             hide_index=True,
@@ -1781,8 +1921,6 @@ def render_actor_combo_ai(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         with st.spinner("배우 조합을 분석하는 중입니다..."):
             html = call_actor_combo_ai(prompt, payload)
         st.markdown(html, unsafe_allow_html=True)
-        with st.expander("Gemini 전달 데이터 보기"):
-            st.code(payload, language="text")
 
 
 
@@ -1794,6 +1932,7 @@ def main():
     actor_meta_df = load_actor_meta_from_gsheet()
     result_df = build_result_table(raw_df)
     result_df = merge_actor_meta(result_df, actor_meta_df)
+    result_df = add_detail_relative_scores(result_df)
 
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
