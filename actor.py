@@ -3,6 +3,7 @@ import re
 import textwrap
 from functools import lru_cache
 from pathlib import Path
+from urllib.parse import quote
 from typing import Dict, List, Tuple
 
 import google.generativeai as genai
@@ -221,6 +222,8 @@ def inject_css():
         }
         .chip {display:inline-block; padding:5px 10px; border-radius:999px; font-size:0.78rem; font-weight:800;}
         .actor-name {font-size:1.05rem; font-weight:900; color:#111827; margin:8px 0 6px 0;}
+        .actor-link {color:#111827; text-decoration:none;}
+        .actor-link:hover {color:#1f64f0; text-decoration:underline;}
         .actor-sub {font-size:0.84rem; color:#6b7280; line-height:1.55;}
         .rep-card {
             background:#fff; border:1px solid #e7ebf3; border-radius:20px; padding:16px 18px;
@@ -383,13 +386,19 @@ def inject_css():
             padding: 0.4rem 0 1.1rem 0;
             border-top: 1px solid #dbe4f3;
         }
-        .detail-panel {
-            background: linear-gradient(180deg, #ffffff 0%, #fafcff 100%);
-            border: 1px solid #e7ebf3;
-            border-radius: 24px;
-            padding: 18px 18px 20px 18px;
-            box-shadow: 0 10px 28px rgba(31,41,55,0.05);
-            margin-bottom: 16px;
+        .detail-line-section {
+            padding: 0.35rem 0 1.15rem 0;
+            border-top: 1px solid #dbe4f3;
+            margin-top: 0.25rem;
+        }
+        .detail-line-section:first-of-type {
+            margin-top: 0;
+        }
+        .detail-section-title {
+            font-size: 1.18rem;
+            font-weight: 900;
+            color:#1f2937;
+            margin: 0.35rem 0 0.95rem 0.1rem;
         }
         .formula-box {
             background:#f8fafc;
@@ -769,13 +778,26 @@ def metric_card(label: str, value: str, sub: str = ""):
     )
 
 
+def actor_detail_href(actor_name: str) -> str:
+    return f"?page={quote('배우 상세보기')}&actor={quote(str(actor_name))}"
+
+
+def actor_link_html(actor_name: str, font_size: str = None, extra_style: str = "") -> str:
+    style = ""
+    if font_size:
+        style += f"font-size:{font_size};"
+    if extra_style:
+        style += extra_style
+    return f"<a class='actor-link actor-name' href='{actor_detail_href(actor_name)}' target='_self' style='{style}'>{actor_name}</a>"
+
+
 def top10_card(rank: int, name: str, tier: str, score: float):
     bg = GRADE_BG.get(tier, "#64748b")
     st.markdown(
         f"""
         <div class='tiny-card'>
             {chip_html(f"{rank}위 · {tier}", tier)}
-            <div class='actor-name' style='font-size:0.98rem; margin-top:10px;'>{name}</div>
+            {actor_link_html(name, font_size='0.98rem', extra_style='margin-top:10px; display:block;')}
             <div class='actor-sub'>합산점수 {format_score(score)}</div>
         </div>
         """,
@@ -789,7 +811,7 @@ def top3_card(rank: int, name: str, tier: str, score: float, subtitle: str = "")
         f"""
         <div class='tiny-card' style='min-height:148px; padding:18px 18px;'>
             {chip_html(f"{rank}위 · {tier}", tier)}
-            <div class='actor-name' style='font-size:{rank_sizes.get(rank, "1rem")}; margin-top:12px;'>{name}</div>
+            {actor_link_html(name, font_size=rank_sizes.get(rank, '1rem'), extra_style='margin-top:12px; display:block;')}
             <div class='actor-sub'>합산점수 {format_score(score)}</div>
             {f"<div class='actor-sub' style='margin-top:4px;'>{subtitle}</div>" if subtitle else ""}
         </div>
@@ -807,7 +829,7 @@ def rank_list_card(rows: pd.DataFrame, start_rank: int = 4):
         lines.append(
             f"<div style='display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 0; border-bottom:1px solid #edf1f7;'>"
             f"<div style='min-width:0;'>"
-            f"<div style='font-size:0.92rem; font-weight:900; color:#111827;'>{i}위 {r['배우']}</div>"
+            f"<div style='font-size:0.92rem; font-weight:900; color:#111827;'>{i}위 <a class='actor-link' href='{actor_detail_href(r['배우'])}' target='_self' style='font-weight:900; color:#111827; text-decoration:none;'>{r['배우']}</a></div>"
             f"<div style='font-size:0.8rem; color:#6b7280; margin-top:3px;'>{r['합산등급']}</div>"
             f"</div>"
             f"<div style='font-size:0.92rem; font-weight:900; color:#111827; white-space:nowrap;'>{format_score(r['합산점수'])}</div>"
@@ -951,7 +973,7 @@ def actor_summary_card(row: pd.Series):
             f"""
             <div class='summary-card'>
                 <div class='summary-title'>배우 개요</div>
-                <div class='summary-big' style='font-size:1.9rem;'>{row['배우']}</div>
+                <div class='summary-big' style='font-size:1.9rem;'><a class='actor-link' href='{actor_detail_href(row['배우'])}' target='_self' style='color:inherit; text-decoration:none;'>{row['배우']}</a></div>
                 <div class='summary-sub'>
                     합산점수 <b>{format_score(row['합산점수'])}</b><br>
                     배우화제성 <b>{format_int(row['배우화제성'])}</b><br>
@@ -1415,14 +1437,18 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
     st.markdown("<div class='section-title'>배우 상세 보기</div>", unsafe_allow_html=True)
     st.markdown("<div class='select-hint'>배우명을 검색해서 원하는 배우를 선택해 주세요.</div>", unsafe_allow_html=True)
     names = result_df["배우"].tolist()
-    selected_actor = st.selectbox("배우 선택", names, index=0, placeholder="배우명을 검색해 선택")
+    query_actor = str(st.query_params.get("actor", names[0])) if names else ""
+    default_index = names.index(query_actor) if query_actor in names else 0
+    selected_actor = st.selectbox("배우 선택", names, index=default_index, placeholder="배우명을 검색해 선택")
+    st.query_params["page"] = "배우 상세보기"
+    st.query_params["actor"] = selected_actor
     row = result_df[result_df["배우"] == selected_actor].iloc[0]
 
     actor_summary_card(row)
     st.markdown("<div class='spacer-md'></div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='detail-panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>그래프 영역</div>", unsafe_allow_html=True)
+    st.markdown("<div class='detail-line-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='detail-section-title'>그래프 영역</div>", unsafe_allow_html=True)
     c1, c2 = st.columns(2)
     detail_label = f"동일 등급군 기준 · {row['상세등급군']}"
     with c1:
@@ -1442,16 +1468,10 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
         )
         st.plotly_chart(fig_group, use_container_width=True)
 
-    fig_compare = make_axis_compare_chart(
-        [row["폭발_전체점수"], row["안정_전체점수"], row["기여_전체점수"]],
-        [row["폭발_상세등급군점수"], row["안정_상세등급군점수"], row["기여_상세등급군점수"]],
-        detail_label,
-    )
-    st.plotly_chart(fig_compare, use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='detail-panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>대표출연작 영역</div>", unsafe_allow_html=True)
+    st.markdown("<div class='detail-line-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='detail-section-title'>대표출연작 영역</div>", unsafe_allow_html=True)
     actor_programs = build_actor_program_summary(raw_df, selected_actor).head(6)
     cols = st.columns(3)
     for idx, r in actor_programs.iterrows():
@@ -1459,8 +1479,8 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
             work_card(r["프로그램명"], r["드라마화제성"], r["배우화제성"])
     st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("<div class='detail-panel'>", unsafe_allow_html=True)
-    st.markdown("<div class='section-title'>유사등급 배우 영역</div>", unsafe_allow_html=True)
+    st.markdown("<div class='detail-line-section'>", unsafe_allow_html=True)
+    st.markdown("<div class='detail-section-title'>유사등급 배우 영역</div>", unsafe_allow_html=True)
     sim = similar_grade_actors(result_df, row, 4)
     cols = st.columns(4)
     for i, (_, r) in enumerate(sim.iterrows()):
@@ -1468,7 +1488,7 @@ def render_detail(raw_df: pd.DataFrame, result_df: pd.DataFrame):
             st.markdown(
                 f"""
                 <div class='mini-card'>
-                    <div class='actor-name'>{r['배우']}</div>
+                    <div>{actor_link_html(r['배우'], extra_style='display:block;')}</div>
                     <div class='actor-sub'>폭발 {r['폭발력등급']} · 안정 {r['안정성등급']} · 기여 {r['기여도등급']}</div>
                     <div class='actor-sub' style='margin-top:8px;'>합산등급 <b>{r['합산등급']}</b> · 점수 {format_score(r['합산점수'])}</div>
                 </div>
@@ -1936,7 +1956,11 @@ def main():
 
     with st.sidebar:
         st.markdown("<div style='height:8px;'></div>", unsafe_allow_html=True)
-        page = st.radio("", ["OVERVIEW", "배우 상세보기", "배우 모아보기", "배우 조합 분석(AI)", "참고사항"], index=0, label_visibility="collapsed")
+        page_options = ["OVERVIEW", "배우 상세보기", "배우 모아보기", "배우 조합 분석(AI)", "참고사항"]
+        query_page = str(st.query_params.get("page", "OVERVIEW"))
+        default_page_index = page_options.index(query_page) if query_page in page_options else 0
+        page = st.radio("", page_options, index=default_page_index, label_visibility="collapsed")
+        st.query_params["page"] = page
         st.markdown("<div class='sidebar-footnote'>문의 : 미디어마케팅팀 데이터인사이트파트</div>", unsafe_allow_html=True)
 
     if page == "OVERVIEW":
